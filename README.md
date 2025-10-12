@@ -19,8 +19,15 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Install (One-Liner)
 
+To install ErsatzTV automatically on any supported Linux system, run:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash
+```
+
+Manual Download / Execute:
 ```bash
 sudo bash install_linux_ersatztv.sh
 ```
@@ -29,7 +36,7 @@ When complete:
 - ErsatzTV will be installed to `/opt/ersatztv`
 - It will run as the `ersatztv` user
 - Web interface available at:  
-  **http://<server-ip>:8409**
+  **http://<localhost>:8409**
 
 ---
 

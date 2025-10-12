@@ -35,8 +35,7 @@ sudo bash install_linux_ersatztv.sh
 When complete:
 - ErsatzTV will be installed to `/opt/ersatztv`
 - It will run as the `ersatztv` user
-- Web interface available at:  
-  **http://<localhost>:8409**
+- Web interface available at:  http://<server-ip>:8409
 
 ---
 

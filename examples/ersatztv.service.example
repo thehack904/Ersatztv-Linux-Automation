@@ -1,0 +1,14 @@
+[Unit]
+Description=ErsatzTV Service
+After=network.target
+
+[Service]
+User=ersatztv
+WorkingDirectory=/opt/ersatztv
+ExecStart=/opt/ersatztv/ErsatzTV --data-folder /home/ersatztv/.local/share/ersatztv
+ExecStop=/bin/kill -s SIGINT $MAINPID
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

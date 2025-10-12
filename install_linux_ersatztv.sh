@@ -67,6 +67,30 @@ rm ersatztv_latest.tar.gz
 chown -R ersatztv:ersatztv "$INSTALL_DIR"
 echo "✅ Installation files ready."
 
+# --- Download compatible FFmpeg build ---------------------------------------
+echo "🔹 Downloading compatible FFmpeg build from ErsatzTV-FFmpeg..."
+
+FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
+FFMPEG_DIR="$INSTALL_DIR/ffmpeg"
+mkdir -p "$FFMPEG_DIR"
+
+FFMPEG_URL=$(curl -s https://api.github.com/repos/$FFMPEG_REPO/releases/latest \
+    | grep "browser_download_url" \
+    | grep -E "linux-$ARCH_SUFFIX.*\.tar\.gz" \
+    | head -n 1 \
+    | cut -d '"' -f 4)
+
+if [ -z "$FFMPEG_URL" ]; then
+    echo "❌ Could not locate FFmpeg download URL for architecture: $ARCH_SUFFIX"
+else
+    echo "➡️  Fetching: $FFMPEG_URL"
+    curl -L -o ffmpeg_bundle.tar.gz "$FFMPEG_URL"
+    tar -xzf ffmpeg_bundle.tar.gz -C "$FFMPEG_DIR" --strip-components=1
+    rm ffmpeg_bundle.tar.gz
+    chown -R ersatztv:ersatztv "$FFMPEG_DIR"
+    echo "✅ FFmpeg installed to $FFMPEG_DIR"
+fi
+
 # --- Create systemd service --------------------------------------------------
 echo "🔹 Creating systemd service..."
 cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service

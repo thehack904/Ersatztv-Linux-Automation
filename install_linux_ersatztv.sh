@@ -5,8 +5,16 @@
 # Unified installer, updater, and uninstaller for ErsatzTV.
 # Compatible with x64 and ARM64 Linux distributions.
 # ---------------------------------------------------------
+VERSION="v1.1.0"
 
 set -e
+
+if [[ "$1" == "--version" ]]; then
+  echo "ErsatzTV Linux Automation Installer $VERSION"
+  exit 0
+fi
+
+echo "ErsatzTV Linux Automation Installer $VERSION"
 
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
@@ -29,10 +37,11 @@ show_usage() {
     echo "ErsatzTV Linux Automation (Installer / Updater / Uninstaller)"
     echo
     echo "Usage:"
-    echo "  sudo bash install_linux_ersatztv.sh install     # Fresh install"
-    echo "  sudo bash install_linux_ersatztv.sh update      # Reinstall or update"
-    echo "  sudo bash install_linux_ersatztv.sh uninstall   # Remove binaries and service"
+    echo "  sudo install_linux_ersatztv.sh install     # Fresh install"
+    echo "  sudo install_linux_ersatztv.sh update      # Reinstall or update"
+    echo "  sudo install_linux_ersatztv.sh uninstall   # Remove binaries and service"
     echo
+    echo "  --version  Shows current version"
     echo "Optional flag for uninstall:"
     echo "  --purge    Remove all data under $DATA_FOLDER"
     exit 1

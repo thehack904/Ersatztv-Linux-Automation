@@ -1,5 +1,9 @@
 # ErsatzTV-Linux-Automation
 
+![Version](https://img.shields.io/badge/version-v1.1.0-blue?style=for-the-badge)
+![License](https://img.shields.io/badge/license-zlib-green?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=for-the-badge)
+
 **Deploy, manage, and update ErsatzTV with a single command.**
 
 ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) on Linux systems.  
@@ -24,17 +28,19 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 To install ErsatzTV automatically on any supported Linux system, run:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install
 ```
+
 
 Manual Download / Execute:
 ```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
-sudo bash install_linux_ersatztv.sh
+sudo bash install_linux_ersatztv.sh install
 ```
 
 When complete:
 - ErsatzTV will be installed to `/opt/ersatztv`
+- Downloads latest ErsatzTV compatiable FFmpeg
 - It will run as the `ersatztv` user
 - Web interface available at:  http://<server-ip>:8409
 
@@ -45,7 +51,7 @@ When complete:
 Run the included updater script anytime:
 
 ```bash
-sudo update_linux_ersatztv.sh
+  sudo install_linux_ersatztv.sh update
 ```
 
 **Updater Features**
@@ -56,52 +62,25 @@ sudo update_linux_ersatztv.sh
 - Rolls back automatically if an update fails  
 
 ---
+## 🧨 Automated Uninstalling ErsatzTV
 
-## 🧠 Systemd Service Example
+Run the included updater script anytime:
+This will remove binaries and service but ask if you want to keep /home/ersatztv which has the current settings and database
+if you want a new install at a later date.
 
-A fully configured service file is automatically created at:
-`/etc/systemd/system/ersatztv.service`
+Partial Uninstall (Save user data/configs)
+```bash
+  sudo install_linux_ersatztv.sh uninstall
+```
 
-```ini
-[Unit]
-Description=ErsatzTV Service
-After=network.target
 
-[Service]
-User=ersatztv
-WorkingDirectory=/opt/ersatztv
-ExecStart=/opt/ersatztv/ErsatzTV --data-folder /home/ersatztv/.local/share/ersatztv
-ExecStop=/bin/kill -s SIGINT $MAINPID
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+Full Uninstall (Nothing Saved)
+```bash
+  sudo install_linux_ersatztv.sh uninstall --purge
 ```
 
 ---
-
-## 📁 Repository Structure
-
-```
-ErsatzTV-Linux-Automation/
-├── install_linux_ersatztv.sh        # Main installer script
-├── README.md                        # Documentation and usage
-├── LICENSE                          # zLib License
-├── CHANGELOG.md                     # Version history
-└── examples/
-    └── ersatztv.service.example      # Reference systemd unit
-```
-
----
-
-## 🧹 Future Roadmap
-
-- 🔄 `uninstall_linux_ersatztv.sh` – Safe removal while preserving data  
-- 🩺 `healthcheck_ersatztv.sh` – Verify uptime, DB integrity, and port status  
-- 🐳 Docker-based CI testing for both Ubuntu and ARM builds  
-
----
+For details, see the [CHANGELOG](CHANGELOG.md).
 
 ## 🪪 License
 

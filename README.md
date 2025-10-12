@@ -29,6 +29,7 @@ curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation
 
 Manual Download / Execute:
 ```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
 sudo bash install_linux_ersatztv.sh
 ```
 

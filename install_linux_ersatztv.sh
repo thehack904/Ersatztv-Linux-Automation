@@ -37,13 +37,15 @@ show_usage() {
     echo "ErsatzTV Linux Automation (Installer / Updater / Uninstaller)"
     echo
     echo "Usage:"
-    echo "  sudo install_linux_ersatztv.sh install     # Fresh install"
-    echo "  sudo install_linux_ersatztv.sh update      # Reinstall or update"
-    echo "  sudo install_linux_ersatztv.sh uninstall   # Remove binaries and service"
+    echo "  sudo install_linux_ersatztv.sh install [--retroiptvguide]   # Install ErsatzTV (and optionally RetroIPTVGuide)"
+    echo "  sudo install_linux_ersatztv.sh update                       # Update or reinstall ErsatzTV"
+    echo "  sudo install_linux_ersatztv.sh uninstall [--purge]          # Remove binaries and service"
     echo
     echo "  --version  Shows current installer version"
-    echo "Optional flag for uninstall:"
-    echo "  --purge    Remove all data under $DATA_FOLDER"
+    echo
+    echo "Optional flags:"
+    echo "  --retroiptvguide  Install RetroIPTVGuide after ErsatzTV setup"
+    echo "  --purge           Remove all data under $DATA_FOLDER during uninstall"
     exit 1
 }
 
@@ -221,6 +223,21 @@ EOS
     echo "✅ Updater installed at $UPDATER_PATH"
 }
 
+install_retroiptvguide() {
+    echo "🔹 Installing RetroIPTVGuide..."
+    cd /opt
+    if [[ -d "RetroIPTVGuide" ]]; then
+        echo "ℹ️  RetroIPTVGuide already exists. Pulling latest..."
+        cd RetroIPTVGuide && git pull
+    else
+        git clone https://github.com/thehack904/RetroIPTVGuide.git
+        cd RetroIPTVGuide
+    fi
+    sudo chmod +x install.sh
+    sudo ./install.sh
+    echo "✅ RetroIPTVGuide installation complete."
+}
+
 verify_startup() {
     echo "🔹 Verifying ErsatzTV startup..."
     for i in {1..20}; do
@@ -270,6 +287,7 @@ uninstall_ersatztv() {
 
 # --- Main Execution ----------------------------------------------------------
 ACTION="$1"
+OPTION="$2"
 
 case "$ACTION" in
     install|update)
@@ -281,6 +299,11 @@ case "$ACTION" in
         create_service
         install_updater
         verify_startup
+
+        if [[ "$OPTION" == "--retroiptvguide" ]]; then
+            install_retroiptvguide
+        fi
+
         echo "✅ Installation complete!"
         ;;
     uninstall)
@@ -291,3 +314,4 @@ case "$ACTION" in
         show_usage
         ;;
 esac
+

@@ -48,7 +48,7 @@ Optional (add RetroIPTVGuide):
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install --retroiptvguide
 ```
 When complete:
-- [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide/tree/main) will be installed
+- [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide) will be installed
 
 ---
 
@@ -110,5 +110,6 @@ This project is licensed under the **zLib License**, allowing free use, modifica
 
 - **ErsatzTV-Linux-Automation** maintained by *thehack904*  
 - **ErsatzTV** developed by [Jason G. Dove](https://github.com/ErsatzTV/ErsatzTV)
+- **RetroIPTVGuide** developed by [thehack904](https://github.com/thehack904/RetroIPTVGuide)
 
 ---

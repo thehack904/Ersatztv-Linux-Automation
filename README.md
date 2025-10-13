@@ -50,6 +50,11 @@ When complete:
 
 Run the included updater script anytime:
 
+(One-Liner)
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s update
+```
+Manual
 ```bash
   sudo install_linux_ersatztv.sh update
 ```

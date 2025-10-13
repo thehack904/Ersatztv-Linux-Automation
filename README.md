@@ -75,6 +75,13 @@ Partial Uninstall (Save user data/configs)
 
 
 Full Uninstall (Nothing Saved)
+
+One-Liner
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge
+```
+
+Local
 ```bash
   sudo install_linux_ersatztv.sh uninstall --purge
 ```

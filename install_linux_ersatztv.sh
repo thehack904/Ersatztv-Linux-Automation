@@ -60,6 +60,40 @@ check_root() {
     fi
 }
 
+# --- Stage 1: Version Check ---------------------------------------------------
+check_existing_version() {
+    if [[ -f "$INSTALL_DIR/ErsatzTV" ]]; then
+        echo "🔍 Checking currently installed ErsatzTV version..."
+        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
+        if [ -z "$INSTALLED_VERSION" ]; then
+            echo "⚠️  Unable to determine installed version from logs."
+            INSTALLED_VERSION="(unknown)"
+        fi
+
+        LATEST_VERSION=$(curl -s https://api.github.com/repos/$GITHUB_REPO/releases/latest | grep tag_name | cut -d '"' -f 4)
+        if [ -z "$LATEST_VERSION" ]; then
+            echo "❌ Failed to retrieve latest release info from GitHub."
+            return
+        fi
+
+        echo "   Installed: $INSTALLED_VERSION"
+        echo "   Latest:    $LATEST_VERSION"
+
+        if [[ "${INSTALLED_VERSION%%-*}" == "$LATEST_VERSION" ]]; then
+            echo "✅ ErsatzTV is already up-to-date ($INSTALLED_VERSION)"
+            read -rp "Would you like to reinstall this version anyway? (y/N): " confirm
+            confirm=${confirm,,}
+            if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
+                echo "⏹️  Installation aborted by user (already up-to-date)."
+                exit 0
+            fi
+            echo "🔁 Proceeding with reinstall of current version..."
+        else
+            echo "⚠️  Update available — proceeding with new installation."
+        fi
+    fi
+}
+
 create_user_and_dirs() {
     if ! id -u ersatztv >/dev/null 2>&1; then
         echo "🔹 Creating ersatztv system user..."
@@ -81,12 +115,10 @@ download_ersatztv() {
     echo "🔹 Downloading latest ErsatzTV release for Linux ($ARCH_SUFFIX)..."
     LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" \
         | grep "browser_download_url" | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" | cut -d '"' -f 4)
-
     if [ -z "$LATEST_URL" ]; then
         echo "❌ Could not find a matching ErsatzTV release for $ARCH_SUFFIX"
         exit 1
     fi
-
     cd "$INSTALL_DIR"
     echo "➡️  Fetching: $LATEST_URL"
     curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
@@ -102,7 +134,6 @@ download_ffmpeg() {
         | grep "browser_download_url" | grep -E "linux(64|arm64).*\.tar\.xz" | grep -i "$ARCH_SUFFIX" | head -n 1 | cut -d '"' -f 4)
     echo "➡️  Fetching: $FFMPEG_URL"
     curl -L -o ffmpeg_bundle.tar.xz "$FFMPEG_URL"
-
     if [ -f "ffmpeg_bundle.tar.xz" ]; then
         echo "🔹 Extracting FFmpeg..."
         tar -xf ffmpeg_bundle.tar.xz -C "$INSTALL_DIR/ffmpeg" --strip-components=1
@@ -190,55 +221,6 @@ EOS
     echo "✅ Updater installed at $UPDATER_PATH"
 }
 
-install_version_checker() {
-    echo "🔹 Installing version check utility..."
-    cat <<'EOS' > /usr/local/bin/check_ersatztv_version.sh
-#!/bin/bash
-# check_ersatztv_version.sh
-# ---------------------------------------------------------
-# Compares installed ErsatzTV version (from logs)
-# against latest GitHub release.
-# Exit codes:
-#   0 - Up-to-date
-#   1 - Update available
-#   2 - Error
-#   3 - Same version, reinstall requested
-# ---------------------------------------------------------
-SERVICE_NAME="ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
-
-INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
-if [ -z "$INSTALLED_VERSION" ]; then
-    echo "⚠️  Could not determine installed ErsatzTV version from logs."
-    echo "   Try restarting the service once: sudo systemctl restart ersatztv"
-    exit 2
-fi
-LATEST_VERSION=$(curl -s https://api.github.com/repos/$GITHUB_REPO/releases/latest | grep tag_name | cut -d '"' -f 4)
-if [ -z "$LATEST_VERSION" ]; then
-    echo "❌ Failed to retrieve latest release info from GitHub."
-    exit 2
-fi
-
-if [[ "${INSTALLED_VERSION%%-*}" == "$LATEST_VERSION" ]]; then
-    echo "✅ ErsatzTV is up-to-date ($INSTALLED_VERSION)"
-    read -rp "Would you like to reinstall this version anyway? (y/N): " confirm
-    confirm=${confirm,,}
-    if [[ "$confirm" == "y" || "$confirm" == "yes" ]]; then
-        echo "ℹ️  Reinstallation requested for current version."
-        exit 3
-    fi
-    exit 0
-else
-    echo "⚠️  Update available:"
-    echo "   Installed: $INSTALLED_VERSION"
-    echo "   Latest:    $LATEST_VERSION"
-    exit 1
-fi
-EOS
-    chmod +x /usr/local/bin/check_ersatztv_version.sh
-    echo "✅ Installed: /usr/local/bin/check_ersatztv_version.sh"
-}
-
 verify_startup() {
     echo "🔹 Verifying ErsatzTV startup..."
     for i in {1..20}; do
@@ -263,7 +245,7 @@ uninstall_ersatztv() {
     rm -f /etc/systemd/system/${SERVICE_NAME}.service
     systemctl daemon-reload
     echo "🔹 Removing application files..."
-    rm -rf "$INSTALL_DIR" "$UPDATER_PATH" /usr/local/bin/check_ersatztv_version.sh
+    rm -rf "$INSTALL_DIR" "$UPDATER_PATH"
     echo
     echo "🧩 ErsatzTV data is stored in: $DATA_FOLDER"
     echo "This folder contains all configuration, databases, logs, and secrets."
@@ -290,25 +272,9 @@ uninstall_ersatztv() {
 ACTION="$1"
 
 case "$ACTION" in
-    install)
+    install|update)
         check_root
-        install_version_checker
-
-        echo "🔍 Checking ErsatzTV version..."
-        check_ersatztv_version.sh
-        status=$?
-
-        if [[ $status -eq 0 ]]; then
-            echo "✅ ErsatzTV is already current. Nothing to do."
-            exit 0
-        elif [[ $status -eq 3 ]]; then
-            echo "🔁 Reinstalling current version as requested..."
-            # continue with normal install flow
-        else
-            echo "⚠️ Update or error detected — proceeding..."
-            # continue install flow
-        fi
-
+        check_existing_version
         create_user_and_dirs
         download_ersatztv
         download_ffmpeg
@@ -316,31 +282,6 @@ case "$ACTION" in
         install_updater
         verify_startup
         echo "✅ Installation complete!"
-        ;;
-    update)
-        check_root
-        install_version_checker
-
-        echo "🔍 Checking ErsatzTV version..."
-        check_ersatztv_version.sh
-        status=$?
-
-        if [[ $status -eq 0 ]]; then
-            echo "✅ ErsatzTV is already current. Nothing to do."
-            exit 0
-        elif [[ $status -eq 3 ]]; then
-            echo "🔁 Reinstalling current version as requested..."
-            # continue with update flow
-        else
-            echo "⚠️ Update or error detected — proceeding..."
-            # continue update flow
-        fi
-
-        systemctl stop $SERVICE_NAME || true
-        download_ersatztv
-        systemctl restart $SERVICE_NAME
-        verify_startup
-        echo "✅ Update complete!"
         ;;
     uninstall)
         check_root

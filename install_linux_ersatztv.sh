@@ -238,6 +238,20 @@ install_retroiptvguide() {
     echo "✅ RetroIPTVGuide installation complete."
 }
 
+uninstall_retroiptvguide() {
+        echo ""
+        echo "🔹 Uninstalling RetroIPTVGuide..."
+        if [[ -d "/home/iptv/iptv-server" && -f "/home/iptv/iptv-server/uninstall.sh" ]]; then
+            sudo bash -i /home/iptv/iptv-server/uninstall.sh
+	    if [[ -d "/opt/RetroIPTVGuide" ]]; then
+		sudo rm -rf /opt/RetroIPTVGuide
+	    fi
+            echo "✅ RetroIPTVGuide uninstallation complete."
+        else
+            echo "⚠️ RetroIPTVGuide not found or uninstall.sh missing."
+        fi
+}
+
 verify_startup() {
     echo "🔹 Verifying ErsatzTV startup..."
     for i in {1..20}; do
@@ -256,17 +270,21 @@ verify_startup() {
 
 uninstall_ersatztv() {
     local purge_flag="$1"
-    echo "🔹 Stopping and disabling service..."
+    local retro_flag="$2"
+
+    echo "🔹 Stopping and disabling ErsatzTV service..."
     systemctl stop $SERVICE_NAME 2>/dev/null || true
     systemctl disable $SERVICE_NAME 2>/dev/null || true
     rm -f /etc/systemd/system/${SERVICE_NAME}.service
     systemctl daemon-reload
-    echo "🔹 Removing application files..."
+
+    echo "🔹 Removing ErsatzTV application files..."
     rm -rf "$INSTALL_DIR" "$UPDATER_PATH"
     echo
     echo "🧩 ErsatzTV data is stored in: $DATA_FOLDER"
     echo "This folder contains all configuration, databases, logs, and secrets."
     echo
+
     if [[ "$purge_flag" == "--purge" ]]; then
         echo "⚠️ Purge mode enabled — removing ersatztv user and home directory..."
         userdel -r ersatztv 2>/dev/null || true
@@ -287,7 +305,8 @@ uninstall_ersatztv() {
 
 # --- Main Execution ----------------------------------------------------------
 ACTION="$1"
-OPTION="$2"
+OPTION1="$2"
+OPTION2="$3"
 
 case "$ACTION" in
     install|update)
@@ -300,7 +319,7 @@ case "$ACTION" in
         install_updater
         verify_startup
 
-        if [[ "$OPTION" == "--retroiptvguide" ]]; then
+        if [[ "$OPTION1" == "--retroiptvguide" || "$OPTION2" == "--retroiptvguide" ]]; then
             install_retroiptvguide
         fi
 
@@ -308,7 +327,10 @@ case "$ACTION" in
         ;;
     uninstall)
         check_root
-        uninstall_ersatztv "$2"
+        uninstall_ersatztv "$OPTION1" "$OPTION2"
+        if [[ "$OPTION1" == "--retroiptvguide" || "$OPTION2" == "--retroiptvguide" ]]; then
+            uninstall_retroiptvguide
+        fi
         ;;
     *)
         show_usage

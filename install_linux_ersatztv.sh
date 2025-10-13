@@ -41,7 +41,7 @@ show_usage() {
     echo "  sudo install_linux_ersatztv.sh update      # Reinstall or update"
     echo "  sudo install_linux_ersatztv.sh uninstall   # Remove binaries and service"
     echo
-    echo "  --version  Shows current version"
+    echo "  --version  Shows current installer version"
     echo "Optional flag for uninstall:"
     echo "  --purge    Remove all data under $DATA_FOLDER"
     exit 1
@@ -74,11 +74,8 @@ create_user_and_dirs() {
     install -d -o ersatztv -g ersatztv -m 700 /home/ersatztv/.local/share
     install -d -o ersatztv -g ersatztv -m 700 "$DATA_FOLDER"
     install -d -o ersatztv -g ersatztv -m 700 "$DATA_FOLDER/logs"
-
-    # App install dir
     install -d -o ersatztv -g ersatztv -m 755 "$INSTALL_DIR"
 }
-
 
 download_ersatztv() {
     echo "🔹 Downloading latest ErsatzTV release for Linux ($ARCH_SUFFIX)..."
@@ -95,21 +92,14 @@ download_ersatztv() {
     curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
     tar -xzf ersatztv_latest.tar.gz --strip-components=1
     rm ersatztv_latest.tar.gz
-    chown -R ersatztv:ersatztv "$INSTALL_DIR"
-    chown -R ersatztv:ersatztv /home/ersatztv/.local
+    chown -R ersatztv:ersatztv "$INSTALL_DIR" /home/ersatztv/.local
 }
 
 download_ffmpeg() {
     echo "🔹 Downloading compatible FFmpeg build..."
     mkdir -p "$INSTALL_DIR/ffmpeg"
-
     FFMPEG_URL=$(curl -s "https://api.github.com/repos/$FFMPEG_REPO/releases/latest" \
-        | grep "browser_download_url" \
-        | grep -E "linux(64|arm64).*\.tar\.xz" \
-        | grep -i "$ARCH_SUFFIX" \
-        | head -n 1 \
-        | cut -d '"' -f 4)
-
+        | grep "browser_download_url" | grep -E "linux(64|arm64).*\.tar\.xz" | grep -i "$ARCH_SUFFIX" | head -n 1 | cut -d '"' -f 4)
     echo "➡️  Fetching: $FFMPEG_URL"
     curl -L -o ffmpeg_bundle.tar.xz "$FFMPEG_URL"
 
@@ -118,7 +108,6 @@ download_ffmpeg() {
         tar -xf ffmpeg_bundle.tar.xz -C "$INSTALL_DIR/ffmpeg" --strip-components=1
         rm ffmpeg_bundle.tar.xz
         chown -R ersatztv:ersatztv "$INSTALL_DIR/ffmpeg"
-        # If binaries live under bin/, adjust service PATH
         if [ -d "$INSTALL_DIR/ffmpeg/bin" ]; then
             FFMPEG_PATH="$INSTALL_DIR/ffmpeg/bin"
         else
@@ -127,7 +116,7 @@ download_ffmpeg() {
         echo "$FFMPEG_PATH" > /tmp/ffmpeg_path_detected
         echo "✅ FFmpeg installed to $FFMPEG_PATH"
     else
-        echo "❌ FFmpeg download failed: file not found."
+        echo "❌ FFmpeg download failed."
     fi
 }
 
@@ -178,8 +167,7 @@ sudo systemctl daemon-reload
 sudo systemctl stop $SERVICE_NAME || true
 mkdir -p "$BACKUP_DIR"
 cp -r "$INSTALL_DIR"/* "$BACKUP_DIR"/ 2>/dev/null || true
-LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" \
-    | grep "browser_download_url" | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" | cut -d '"' -f 4)
+LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | grep "browser_download_url" | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" | cut -d '"' -f 4)
 [ -z "$LATEST_URL" ] && { echo "❌ Could not find download URL."; exit 1; }
 cd "$INSTALL_DIR"
 curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
@@ -202,6 +190,37 @@ EOS
     echo "✅ Updater installed at $UPDATER_PATH"
 }
 
+install_version_checker() {
+    echo "🔹 Installing version check utility..."
+    cat <<'EOS' > /usr/local/bin/check_ersatztv_version.sh
+#!/bin/bash
+SERVICE_NAME="ersatztv"
+GITHUB_REPO="ErsatzTV/ErsatzTV"
+INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
+if [ -z "$INSTALLED_VERSION" ]; then
+    echo "⚠️  Could not determine installed ErsatzTV version from logs."
+    echo "   Try restarting the service once: sudo systemctl restart ersatztv"
+    exit 2
+fi
+LATEST_VERSION=$(curl -s https://api.github.com/repos/$GITHUB_REPO/releases/latest | grep tag_name | cut -d '"' -f 4)
+if [ -z "$LATEST_VERSION" ]; then
+    echo "❌ Failed to retrieve latest release information from GitHub."
+    exit 2
+fi
+if [[ "${INSTALLED_VERSION%%-*}" == "$LATEST_VERSION" ]]; then
+    echo "✅ ErsatzTV is up-to-date ($INSTALLED_VERSION)"
+    exit 0
+else
+    echo "⚠️  Update available:"
+    echo "   Installed: $INSTALLED_VERSION"
+    echo "   Latest:    $LATEST_VERSION"
+    exit 1
+fi
+EOS
+    chmod +x /usr/local/bin/check_ersatztv_version.sh
+    echo "✅ Installed: /usr/local/bin/check_ersatztv_version.sh"
+}
+
 verify_startup() {
     echo "🔹 Verifying ErsatzTV startup..."
     for i in {1..20}; do
@@ -220,16 +239,13 @@ verify_startup() {
 
 uninstall_ersatztv() {
     local purge_flag="$1"
-
     echo "🔹 Stopping and disabling service..."
     systemctl stop $SERVICE_NAME 2>/dev/null || true
     systemctl disable $SERVICE_NAME 2>/dev/null || true
     rm -f /etc/systemd/system/${SERVICE_NAME}.service
     systemctl daemon-reload
-
     echo "🔹 Removing application files..."
-    rm -rf "$INSTALL_DIR" "$UPDATER_PATH"
-
+    rm -rf "$INSTALL_DIR" "$UPDATER_PATH" /usr/local/bin/check_ersatztv_version.sh
     echo
     echo "🧩 ErsatzTV data is stored in: $DATA_FOLDER"
     echo "This folder contains all configuration, databases, logs, and secrets."
@@ -250,7 +266,6 @@ uninstall_ersatztv() {
             echo "ℹ️ Keeping ersatztv user and home directory at /home/ersatztv"
         fi
     fi
-
     echo "✅ ErsatzTV has been uninstalled."
 }
 
@@ -265,11 +280,13 @@ case "$ACTION" in
         download_ffmpeg
         create_service
         install_updater
+        install_version_checker
         verify_startup
         echo "✅ Installation complete!"
         ;;
     update)
         check_root
+	install_version_checker
         systemctl stop $SERVICE_NAME || true
         download_ersatztv
         systemctl restart $SERVICE_NAME

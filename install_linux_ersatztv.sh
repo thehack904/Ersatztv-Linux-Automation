@@ -275,12 +275,12 @@ ACTION="$1"
 case "$ACTION" in
     install)
         check_root
+        install_version_checker
         create_user_and_dirs
         download_ersatztv
         download_ffmpeg
         create_service
         install_updater
-        install_version_checker
         verify_startup
         echo "✅ Installation complete!"
         ;;

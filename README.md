@@ -31,7 +31,6 @@ To install ErsatzTV automatically on any supported Linux system, run:
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install
 ```
 
-
 Manual Download / Execute:
 ```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
@@ -43,6 +42,13 @@ When complete:
 - Downloads latest ErsatzTV compatiable FFmpeg
 - It will run as the `ersatztv` user
 - Web interface available at:  http://<server-ip>:8409
+  
+Optional (add RetroIPTVGuide):
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install --retroiptvguide
+```
+When complete:
+- RetroIPTVGuide will be installed [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide/tree/main)
 
 ---
 

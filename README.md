@@ -97,6 +97,11 @@ Local
   sudo install_linux_ersatztv.sh uninstall --purge
 ```
 
+Optional (remove RetroIPTVGuide):
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge --retroiptvguide
+```
+
 ---
 For details, see the [CHANGELOG](CHANGELOG.md).
 

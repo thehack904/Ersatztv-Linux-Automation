@@ -1,0 +1,7 @@
+# Files or paths to skip from scanning
+.git/
+.github/
+docs/
+LICENSE
+CHANGELOG.md
+

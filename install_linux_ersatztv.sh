@@ -233,8 +233,9 @@ install_retroiptvguide() {
         git clone https://github.com/thehack904/RetroIPTVGuide.git
         cd RetroIPTVGuide
     fi
-    sudo chmod +x install.sh
-    sudo bash -i ./install.sh
+    #sudo chmod +x install.sh
+    #sudo bash -i ./install.sh
+	sudo bash -c "./install.sh < /dev/tty"
     echo "✅ RetroIPTVGuide installation complete."
 }
 

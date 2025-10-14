@@ -235,8 +235,7 @@ install_retroiptvguide() {
     fi
     #sudo chmod +x install.sh
     #sudo bash -i ./install.sh
-	echo Running 'sudo bash -c "./install.sh < /dev/tty"'
-	sudo bash -c "./install.sh < /dev/tty"
+	echo "yes" | sudo bash ./install.sh
     echo "✅ RetroIPTVGuide installation complete."
 }
 

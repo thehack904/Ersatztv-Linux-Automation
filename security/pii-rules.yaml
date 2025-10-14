@@ -1,0 +1,16 @@
+# Basic regexes for detecting sensitive information
+# (customize for your project)
+
+# Email addresses
+- '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+# AWS / API keys
+- 'AKIA[0-9A-Z]{16}'
+- 'ghp_[A-Za-z0-9]{36}'
+- 'AIza[0-9A-Za-z\-_]{35}'
+# Private keys
+- '-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'
+# IP addresses (IPv4)
+- '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b'
+# Password/secret variables
+- '(?i)(password|secret|token|key)[^a-zA-Z0-9]'
+

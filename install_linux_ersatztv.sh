@@ -31,27 +31,6 @@ else
     ARCH_SUFFIX="x64"
 fi
 
-# --- RHEL / Fedora Compatibility ---------------------------------------------
-if [[ -f /etc/fedora-release || -f /etc/redhat-release ]]; then
-    echo "🔹 Fedora/RHEL system detected. Ensuring prerequisites..."
-    PKG_MGR=$(command -v dnf || command -v yum)
-    $PKG_MGR install -y curl tar git 2>/dev/null || true
-
-    # Use correct nologin path (differs on some Fedora/RHEL systems)
-    NOLOGIN_PATH=$(command -v nologin || echo "/sbin/nologin")
-
-    # Handle SELinux contexts if enabled
-    if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
-        echo "🔸 SELinux is enforcing — permissions will be adjusted post-install."
-        SELINUX_ENFORCING=true
-    else
-        SELINUX_ENFORCING=false
-    fi
-else
-    NOLOGIN_PATH="/usr/sbin/nologin"
-    SELINUX_ENFORCING=false
-fi
-
 # --- Functions ---------------------------------------------------------------
 
 show_usage() {
@@ -120,7 +99,7 @@ check_existing_version() {
 create_user_and_dirs() {
     if ! id -u ersatztv >/dev/null 2>&1; then
         echo "🔹 Creating ersatztv system user..."
-        useradd -r -m -d /home/ersatztv -s "$NOLOGIN_PATH" ersatztv
+        useradd -r -m -d /home/ersatztv -s /usr/sbin/nologin ersatztv
     else
         echo "ℹ️ ersatztv user already exists."
     fi
@@ -146,7 +125,7 @@ download_ersatztv() {
     echo "➡️  Fetching: $LATEST_URL"
     curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
     tar -xzf ersatztv_latest.tar.gz --strip-components=1
-    rm -f ersatztv_latest.tar.gz
+    rm ersatztv_latest.tar.gz
     chown -R ersatztv:ersatztv "$INSTALL_DIR" /home/ersatztv/.local
 }
 
@@ -160,7 +139,7 @@ download_ffmpeg() {
     if [ -f "ffmpeg_bundle.tar.xz" ]; then
         echo "🔹 Extracting FFmpeg..."
         tar -xf ffmpeg_bundle.tar.xz -C "$INSTALL_DIR/ffmpeg" --strip-components=1
-        rm -f ffmpeg_bundle.tar.xz
+        rm ffmpeg_bundle.tar.xz
         chown -R ersatztv:ersatztv "$INSTALL_DIR/ffmpeg"
         if [ -d "$INSTALL_DIR/ffmpeg/bin" ]; then
             FFMPEG_PATH="$INSTALL_DIR/ffmpeg/bin"
@@ -195,55 +174,10 @@ Environment=PATH=$FFMPEG_PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    if [[ "$SELINUX_ENFORCING" == true ]]; then
-        echo "🔹 Adjusting SELinux contexts for /opt/ersatztv and /home/ersatztv..."
-        chcon -R -t bin_t /opt/ersatztv 2>/dev/null || true
-        chcon -R -t home_root_t /home/ersatztv 2>/dev/null || true
-    fi
-
     rm -f /tmp/ffmpeg_path_detected
     systemctl daemon-reload
     systemctl enable $SERVICE_NAME
     systemctl restart $SERVICE_NAME
-    configure_firewall
-}
-
-configure_firewall() {
-    echo "🔹 Checking firewall status and allowing port 8409..."
-
-    # --- Fedora / RHEL / firewalld ------------------------------------------
-    if command -v firewall-cmd >/dev/null 2>&1; then
-        if systemctl is-active --quiet firewalld; then
-            echo "   Detected firewalld; opening port 8409/tcp..."
-            firewall-cmd --permanent --add-port=8409/tcp >/dev/null 2>&1 || true
-            firewall-cmd --reload >/dev/null 2>&1 || true
-            echo "   ✅ Port 8409 opened in firewalld."
-        else
-            echo "   ℹ️  firewalld not active — skipping."
-        fi
-
-    # --- Debian / Ubuntu / ufw ----------------------------------------------
-    elif command -v ufw >/dev/null 2>&1; then
-        if ufw status | grep -q "Status: active"; then
-            echo "   Detected ufw; allowing port 8409/tcp..."
-            ufw allow 8409/tcp >/dev/null 2>&1 || true
-            echo "   ✅ Port 8409 opened in ufw."
-        else
-            echo "   ℹ️  ufw is installed but not active — skipping."
-        fi
-
-    else
-        echo "   ⚙️  No known firewall manager detected (firewalld/ufw)."
-    fi
-
-    # Display common accessible IP so users know where to connect
-    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-    if [ -n "$HOST_IP" ]; then
-        echo "🌐 ErsatzTV web interface: http://$HOST_IP:8409"
-    else
-        echo "🌐 ErsatzTV web interface: http://<server-ip>:8409"
-    fi
 }
 
 install_updater() {
@@ -271,7 +205,7 @@ LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 cd "$INSTALL_DIR"
 curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
 tar -xzf ersatztv_latest.tar.gz --strip-components=1
-rm -f ersatztv_latest.tar.gz
+rm ersatztv_latest.tar.gz
 chown -R ersatztv:ersatztv "$INSTALL_DIR"
 sudo sed -i 's/^Restart=no/Restart=on-failure/' /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo systemctl daemon-reload
@@ -299,52 +233,24 @@ install_retroiptvguide() {
         git clone https://github.com/thehack904/RetroIPTVGuide.git
         cd RetroIPTVGuide
     fi
-    # Run the install non-interactively (the upstream install.sh may prompt)
-    echo "yes" | sudo bash ./install.sh
+    #sudo chmod +x install.sh
+    #sudo bash -i ./install.sh
+	echo "yes" | sudo bash ./install.sh
     echo "✅ RetroIPTVGuide installation complete."
 }
 
 uninstall_retroiptvguide() {
-    echo ""
-    echo "🔹 Uninstalling RetroIPTVGuide..."
-    if [[ -d "/home/iptv/iptv-server" && -f "/home/iptv/iptv-server/uninstall.sh" ]]; then
-        sudo bash -i /home/iptv/iptv-server/uninstall.sh
-        if [[ -d "/opt/RetroIPTVGuide" ]]; then
-            sudo rm -rf /opt/RetroIPTVGuide
-        fi
-        echo "✅ RetroIPTVGuide uninstallation complete."
-    else
-        echo "⚠️ RetroIPTVGuide not found or uninstall.sh missing."
-    fi
-}
-
-remove_firewall_rule() {
-    echo "🔹 Checking firewall to remove port 8409..."
-
-    # --- Fedora / RHEL / firewalld ------------------------------------------
-    if command -v firewall-cmd >/dev/null 2>&1; then
-        if systemctl is-active --quiet firewalld; then
-            echo "   Detected firewalld; removing port 8409/tcp..."
-            firewall-cmd --permanent --remove-port=8409/tcp >/dev/null 2>&1 || true
-            firewall-cmd --reload >/dev/null 2>&1 || true
-            echo "   ✅ Port 8409 removed from firewalld."
+        echo ""
+        echo "🔹 Uninstalling RetroIPTVGuide..."
+        if [[ -d "/home/iptv/iptv-server" && -f "/home/iptv/iptv-server/uninstall.sh" ]]; then
+            sudo bash -i /home/iptv/iptv-server/uninstall.sh
+	    if [[ -d "/opt/RetroIPTVGuide" ]]; then
+		sudo rm -rf /opt/RetroIPTVGuide
+	    fi
+            echo "✅ RetroIPTVGuide uninstallation complete."
         else
-            echo "   ℹ️  firewalld not active — skipping."
+            echo "⚠️ RetroIPTVGuide not found or uninstall.sh missing."
         fi
-
-    # --- Debian / Ubuntu / ufw ----------------------------------------------
-    elif command -v ufw >/dev/null 2>&1; then
-        if ufw status | grep -q "Status: active"; then
-            echo "   Detected ufw; removing port 8409/tcp..."
-            ufw delete allow 8409/tcp >/dev/null 2>&1 || true
-            echo "   ✅ Port 8409 removed from ufw."
-        else
-            echo "   ℹ️  ufw installed but not active — skipping."
-        fi
-
-    else
-        echo "   ⚙️  No known firewall manager detected (firewalld/ufw)."
-    fi
 }
 
 verify_startup() {
@@ -395,9 +301,6 @@ uninstall_ersatztv() {
             echo "ℹ️ Keeping ersatztv user and home directory at /home/ersatztv"
         fi
     fi
-
-    remove_firewall_rule
-
     echo "✅ ErsatzTV has been uninstalled."
 }
 

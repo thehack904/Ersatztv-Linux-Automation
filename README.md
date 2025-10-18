@@ -1,6 +1,6 @@
 # ErsatzTV-Linux-Automation
 
-![Version](https://img.shields.io/badge/version-v1.1.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-v1.2.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-zlib-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=for-the-badge)
 
@@ -20,6 +20,9 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 - 🔁 **Hardened Updater** – Includes rollback protection, graceful shutdown, and lock-file safety.
 - 🔒 **Data-Safe Updates** – Leaves your database and configuration untouched during upgrades.
 - 🚀 **Systemd Integration** – Creates and enables the service automatically for seamless boot startup.
+- 🧱 **Fedora/RHEL Compatibility** – Detects Fedora or RHEL systems, installs required packages (`curl`, `tar`, `git`), and automatically adjusts SELinux file contexts.
+- 💠 **Ubuntu/Debian Compatibility** – Works seamlessly with Debian-based distributions using built-in `apt`, and supports systems with or without `ufw`.
+- 🔥 **Automatic Firewall Configuration** – Opens port `8409/tcp` during installation and removes it on uninstall for both `firewalld` and `ufw` systems.
 
 ---
 
@@ -39,8 +42,9 @@ sudo bash install_linux_ersatztv.sh install
 
 When complete:
 - ErsatzTV will be installed to `/opt/ersatztv`
-- Downloads latest ErsatzTV compatiable FFmpeg
+- Downloads latest ErsatzTV compatible FFmpeg
 - It will run as the `ersatztv` user
+- Automatically configures firewall (if active)
 - Web interface available at:  http://<server-ip>:8409
   
 Optional (add RetroIPTVGuide):
@@ -75,15 +79,13 @@ Manual
 ---
 ## 🧨 Automated Uninstalling ErsatzTV
 
-Run the included updater script anytime:
-This will remove binaries and service but ask if you want to keep /home/ersatztv which has the current settings and database
-if you want a new install at a later date.
+Run the included updater script anytime:  
+This will remove binaries and service but ask if you want to keep `/home/ersatztv` which has the current settings and database if you want a new install at a later date.
 
 Partial Uninstall (Save user data/configs)
 ```bash
   sudo install_linux_ersatztv.sh uninstall
 ```
-
 
 Full Uninstall (Nothing Saved)
 
@@ -101,6 +103,8 @@ Optional (remove RetroIPTVGuide):
 ```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge --retroiptvguide
 ```
+
+During uninstall, the script will also remove the open firewall rule (port `8409/tcp`) if present.
 
 ---
 For details, see the [CHANGELOG](CHANGELOG.md).

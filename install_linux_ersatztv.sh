@@ -399,8 +399,9 @@ uninstall_ersatztv() {
         echo "⚠️ Purge mode enabled — removing ersatztv user and home directory..."
         userdel -r ersatztv 2>/dev/null || true
         echo "✅ ersatztv user and all data removed."
-    else
-        read -rp "Do you also want to remove the 'ersatztv' user and its home directory? (y/N): " confirm
+    elif [ -t 0 ]; then
+        # Interactive terminal, safe to prompt
+        read -rp "Do you also want to remove the 'ersatztv' user and its home directory? (y/N): " confirm || true
         confirm=${confirm,,}
         if [[ "$confirm" == "y" || "$confirm" == "yes" ]]; then
             echo "⚠️ Removing ersatztv user and all associated data..."
@@ -409,6 +410,9 @@ uninstall_ersatztv() {
         else
             echo "ℹ️ Keeping ersatztv user and home directory at /home/ersatztv"
         fi
+    else
+        # Non-interactive (piped curl/bash)
+        echo "ℹ️ Non-interactive mode detected — keeping ersatztv user and home directory."
     fi
 
     remove_firewall_rule

@@ -66,7 +66,7 @@ curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation
 ```
 Manual
 ```bash
-  sudo install_linux_ersatztv.sh update
+  sudo update_linux_ersatztv.sh
 ```
 
 **Updater Features**

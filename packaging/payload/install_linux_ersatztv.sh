@@ -5,7 +5,7 @@
 # Unified installer, updater, and uninstaller for ErsatzTV.
 # Compatible with x64 and ARM64 Linux distributions.
 # ---------------------------------------------------------
-VERSION="v1.1.0"
+VERSION="v1.2.0"
 
 set -e
 
@@ -19,7 +19,7 @@ echo "ErsatzTV Linux Automation Installer $VERSION"
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
 DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 UPDATER_PATH="/usr/local/bin/update_linux_ersatztv.sh"
 
@@ -64,9 +64,9 @@ check_root() {
 
 # --- Stage 1: Version Check ---------------------------------------------------
 check_existing_version() {
-    if [[ -f "$INSTALL_DIR/ErsatzTV" ]]; then
+    if [[ -f "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
         echo "🔍 Checking currently installed ErsatzTV version..."
-        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
+        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV-Legacy version" | tail -n 1 | awk '{print $NF}')
         if [ -z "$INSTALLED_VERSION" ]; then
             echo "⚠️  Unable to determine installed version from logs."
             INSTALLED_VERSION="(unknown)"
@@ -164,7 +164,7 @@ After=network.target
 [Service]
 User=ersatztv
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/ErsatzTV --data-folder $DATA_FOLDER
+ExecStart=$INSTALL_DIR/ErsatzTV-Legacy --data-folder $DATA_FOLDER
 ExecStop=/bin/kill -s SIGINT \$MAINPID
 Restart=on-failure
 RestartSec=5
@@ -187,7 +187,7 @@ install_updater() {
 set -e
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 BACKUP_DIR="/opt/ersatztv_backup_$(date +%Y%m%d_%H%M%S)"
 LOCK_FILE="/tmp/ersatztv_update.lock"
 ARCH=$(uname -m)

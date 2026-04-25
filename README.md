@@ -1,12 +1,12 @@
 # ErsatzTV-Linux-Automation
 
-![Version](https://img.shields.io/badge/version-v1.1.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-v1.2.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-zlib-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=for-the-badge)
 
 **Deploy, manage, and update ErsatzTV with a single command.**
 
-ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) on Linux systems.  
+ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV Legacy](https://github.com/ErsatzTV/legacy) on Linux systems.  
 It provides a one-command installer, hardened updater, and complete systemd integration to make ErsatzTV deployment truly hands-free.
 
 ---
@@ -114,7 +114,7 @@ This project is licensed under the **zLib License**, allowing free use, modifica
 ## 💬 Credits
 
 - **ErsatzTV-Linux-Automation** maintained by *thehack904*  
-- **ErsatzTV** developed by [Jason G. Dove](https://github.com/ErsatzTV/ErsatzTV)
+- **ErsatzTV Legacy** developed by [Jason G. Dove](https://github.com/ErsatzTV/legacy)
 - **RetroIPTVGuide** developed by [thehack904](https://github.com/thehack904/RetroIPTVGuide)
 
 ---

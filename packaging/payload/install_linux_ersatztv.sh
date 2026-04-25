@@ -64,9 +64,9 @@ check_root() {
 
 # --- Stage 1: Version Check ---------------------------------------------------
 check_existing_version() {
-    if [[ -f "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+    if [[ -f "$INSTALL_DIR/ErsatzTV" ]]; then
         echo "🔍 Checking currently installed ErsatzTV version..."
-        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV-Legacy version" | tail -n 1 | awk '{print $NF}')
+        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
         if [ -z "$INSTALLED_VERSION" ]; then
             echo "⚠️  Unable to determine installed version from logs."
             INSTALLED_VERSION="(unknown)"
@@ -164,7 +164,7 @@ After=network.target
 [Service]
 User=ersatztv
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/ErsatzTV-Legacy --data-folder $DATA_FOLDER
+ExecStart=$INSTALL_DIR/ErsatzTV --data-folder $DATA_FOLDER
 ExecStop=/bin/kill -s SIGINT \$MAINPID
 Restart=on-failure
 RestartSec=5

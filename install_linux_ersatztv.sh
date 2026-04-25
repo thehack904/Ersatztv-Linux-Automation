@@ -150,6 +150,16 @@ download_ersatztv() {
     chown -R ersatztv:ersatztv "$INSTALL_DIR" /home/ersatztv/.local
 }
 
+detect_ersatztv_binary() {
+    if [[ -x "$INSTALL_DIR/ErsatzTV" ]]; then
+        echo "$INSTALL_DIR/ErsatzTV"
+    elif [[ -x "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+        echo "$INSTALL_DIR/ErsatzTV-Legacy"
+    else
+        echo ""
+    fi
+}
+
 download_ffmpeg() {
     echo "🔹 Downloading compatible FFmpeg build..."
     mkdir -p "$INSTALL_DIR/ffmpeg"
@@ -177,6 +187,14 @@ download_ffmpeg() {
 create_service() {
     echo "🔹 Creating systemd service..."
     FFMPEG_PATH=$(cat /tmp/ffmpeg_path_detected 2>/dev/null || echo "$INSTALL_DIR/ffmpeg")
+
+    DETECTED_BINARY=$(detect_ersatztv_binary)
+    if [[ -z "$DETECTED_BINARY" ]]; then
+        echo "❌ Cannot find ErsatzTV binary in $INSTALL_DIR (tried ErsatzTV, ErsatzTV-Legacy)."
+        exit 1
+    fi
+    echo "✅ Detected binary: $DETECTED_BINARY"
+
     cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
 Description=ErsatzTV Service
@@ -185,7 +203,7 @@ After=network.target
 [Service]
 User=ersatztv
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/ErsatzTV --data-folder $DATA_FOLDER
+ExecStart=$DETECTED_BINARY --data-folder $DATA_FOLDER
 ExecStop=/bin/kill -s SIGINT \$MAINPID
 Restart=on-failure
 RestartSec=5
@@ -253,6 +271,7 @@ install_updater() {
 set -e
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
+DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
 GITHUB_REPO="ErsatzTV/ErsatzTV"
 BACKUP_DIR="/opt/ersatztv_backup_$(date +%Y%m%d_%H%M%S)"
 LOCK_FILE="/tmp/ersatztv_update.lock"
@@ -273,6 +292,20 @@ curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
 tar -xzf ersatztv_latest.tar.gz --strip-components=1
 rm -f ersatztv_latest.tar.gz
 chown -R ersatztv:ersatztv "$INSTALL_DIR"
+# Binary detection is inlined here because this script lives in a single-quoted
+# heredoc in the installer and cannot call the installer's detect_ersatztv_binary().
+DETECTED_BINARY=""
+if [[ -x "$INSTALL_DIR/ErsatzTV" ]]; then
+    DETECTED_BINARY="$INSTALL_DIR/ErsatzTV"
+elif [[ -x "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+    DETECTED_BINARY="$INSTALL_DIR/ErsatzTV-Legacy"
+fi
+if [[ -z "$DETECTED_BINARY" ]]; then
+    echo "❌ Cannot find ErsatzTV binary in $INSTALL_DIR after update (tried ErsatzTV, ErsatzTV-Legacy)."
+    exit 1
+fi
+echo "✅ Detected binary: $DETECTED_BINARY"
+sudo sed -i "s|^ExecStart=.*|ExecStart=$DETECTED_BINARY --data-folder $DATA_FOLDER|" /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo sed -i 's/^Restart=no/Restart=on-failure/' /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl start $SERVICE_NAME

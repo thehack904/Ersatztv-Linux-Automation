@@ -5,7 +5,7 @@
 # Unified installer, updater, and uninstaller for ErsatzTV.
 # Compatible with x64 and ARM64 Linux distributions.
 # ---------------------------------------------------------
-VERSION="v1.1.0"
+VERSION="v1.2.0"
 
 set -e
 
@@ -19,7 +19,7 @@ echo "ErsatzTV Linux Automation Installer $VERSION"
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
 DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 UPDATER_PATH="/usr/local/bin/update_linux_ersatztv.sh"
 
@@ -187,7 +187,7 @@ install_updater() {
 set -e
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 BACKUP_DIR="/opt/ersatztv_backup_$(date +%Y%m%d_%H%M%S)"
 LOCK_FILE="/tmp/ersatztv_update.lock"
 ARCH=$(uname -m)

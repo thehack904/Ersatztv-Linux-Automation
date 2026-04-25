@@ -6,7 +6,7 @@
 
 **Deploy, manage, and update ErsatzTV with a single command.**
 
-ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV Legacy](https://github.com/ErsatzTV/legacy) on Linux systems.  
+ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) on Linux systems.  
 It provides a one-command installer, hardened updater, and complete systemd integration to make ErsatzTV deployment truly hands-free.
 
 ---
@@ -20,6 +20,9 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 - 🔁 **Hardened Updater** – Includes rollback protection, graceful shutdown, and lock-file safety.
 - 🔒 **Data-Safe Updates** – Leaves your database and configuration untouched during upgrades.
 - 🚀 **Systemd Integration** – Creates and enables the service automatically for seamless boot startup.
+- 🧱 **Fedora/RHEL Compatibility** – Detects Fedora or RHEL systems, installs required packages (`curl`, `tar`, `git`), and automatically adjusts SELinux file contexts.
+- 💠 **Ubuntu/Debian Compatibility** – Works seamlessly with Debian-based distributions using built-in `apt`, and supports systems with or without `ufw`.
+- 🔥 **Automatic Firewall Configuration** – Opens port `8409/tcp` during installation and removes it on uninstall for both `firewalld` and `ufw` systems.
 
 ---
 
@@ -33,14 +36,15 @@ curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation
 
 Manual Download / Execute:
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
+wget https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
 sudo bash install_linux_ersatztv.sh install
 ```
 
 When complete:
 - ErsatzTV will be installed to `/opt/ersatztv`
-- Downloads latest ErsatzTV compatiable FFmpeg
+- Downloads latest ErsatzTV compatible FFmpeg
 - It will run as the `ersatztv` user
+- Automatically configures firewall (if active)
 - Web interface available at:  http://<server-ip>:8409
   
 Optional (add RetroIPTVGuide):
@@ -62,7 +66,7 @@ curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation
 ```
 Manual
 ```bash
-  sudo install_linux_ersatztv.sh update
+  sudo update_linux_ersatztv.sh
 ```
 
 **Updater Features**
@@ -75,15 +79,13 @@ Manual
 ---
 ## 🧨 Automated Uninstalling ErsatzTV
 
-Run the included updater script anytime:
-This will remove binaries and service but ask if you want to keep /home/ersatztv which has the current settings and database
-if you want a new install at a later date.
+Run the included updater script anytime:  
+This will remove binaries and service but ask if you want to keep `/home/ersatztv` which has the current settings and database if you want a new install at a later date.
 
 Partial Uninstall (Save user data/configs)
 ```bash
   sudo install_linux_ersatztv.sh uninstall
 ```
-
 
 Full Uninstall (Nothing Saved)
 
@@ -102,6 +104,8 @@ Optional (remove RetroIPTVGuide):
 curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge --retroiptvguide
 ```
 
+During uninstall, the script will also remove the open firewall rule (port `8409/tcp`) if present.
+
 ---
 For details, see the [CHANGELOG](CHANGELOG.md).
 
@@ -114,7 +118,7 @@ This project is licensed under the **zLib License**, allowing free use, modifica
 ## 💬 Credits
 
 - **ErsatzTV-Linux-Automation** maintained by *thehack904*  
-- **ErsatzTV Legacy** developed by [Jason G. Dove](https://github.com/ErsatzTV/legacy)
+- **ErsatzTV** developed by [Jason G. Dove](https://github.com/ErsatzTV/ErsatzTV)
 - **RetroIPTVGuide** developed by [thehack904](https://github.com/thehack904/RetroIPTVGuide)
 
 ---

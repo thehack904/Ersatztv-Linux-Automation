@@ -19,7 +19,7 @@ echo "ErsatzTV Linux Automation Installer $VERSION"
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
 DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
-GITHUB_REPO="ErsatzTV/legacy"
+GITHUB_REPO="ErsatzTV/ErsatzTV"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 UPDATER_PATH="/usr/local/bin/update_linux_ersatztv.sh"
 
@@ -29,6 +29,27 @@ if [[ "$ARCH" == "aarch64" ]]; then
     ARCH_SUFFIX="arm64"
 else
     ARCH_SUFFIX="x64"
+fi
+
+# --- RHEL / Fedora Compatibility ---------------------------------------------
+if [[ -f /etc/fedora-release || -f /etc/redhat-release ]]; then
+    echo "🔹 Fedora/RHEL system detected. Ensuring prerequisites..."
+    PKG_MGR=$(command -v dnf || command -v yum)
+    $PKG_MGR install -y curl tar git 2>/dev/null || true
+
+    # Use correct nologin path (differs on some Fedora/RHEL systems)
+    NOLOGIN_PATH=$(command -v nologin || echo "/sbin/nologin")
+
+    # Handle SELinux contexts if enabled
+    if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce)" == "Enforcing" ]]; then
+        echo "🔸 SELinux is enforcing — permissions will be adjusted post-install."
+        SELINUX_ENFORCING=true
+    else
+        SELINUX_ENFORCING=false
+    fi
+else
+    NOLOGIN_PATH="/usr/sbin/nologin"
+    SELINUX_ENFORCING=false
 fi
 
 # --- Functions ---------------------------------------------------------------
@@ -99,7 +120,7 @@ check_existing_version() {
 create_user_and_dirs() {
     if ! id -u ersatztv >/dev/null 2>&1; then
         echo "🔹 Creating ersatztv system user..."
-        useradd -r -m -d /home/ersatztv -s /usr/sbin/nologin ersatztv
+        useradd -r -m -d /home/ersatztv -s "$NOLOGIN_PATH" ersatztv
     else
         echo "ℹ️ ersatztv user already exists."
     fi
@@ -125,8 +146,18 @@ download_ersatztv() {
     echo "➡️  Fetching: $LATEST_URL"
     curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
     tar -xzf ersatztv_latest.tar.gz --strip-components=1
-    rm ersatztv_latest.tar.gz
+    rm -f ersatztv_latest.tar.gz
     chown -R ersatztv:ersatztv "$INSTALL_DIR" /home/ersatztv/.local
+}
+
+detect_ersatztv_binary() {
+    if [[ -x "$INSTALL_DIR/ErsatzTV" ]]; then
+        echo "$INSTALL_DIR/ErsatzTV"
+    elif [[ -x "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+        echo "$INSTALL_DIR/ErsatzTV-Legacy"
+    else
+        echo ""
+    fi
 }
 
 download_ffmpeg() {
@@ -139,7 +170,7 @@ download_ffmpeg() {
     if [ -f "ffmpeg_bundle.tar.xz" ]; then
         echo "🔹 Extracting FFmpeg..."
         tar -xf ffmpeg_bundle.tar.xz -C "$INSTALL_DIR/ffmpeg" --strip-components=1
-        rm ffmpeg_bundle.tar.xz
+        rm -f ffmpeg_bundle.tar.xz
         chown -R ersatztv:ersatztv "$INSTALL_DIR/ffmpeg"
         if [ -d "$INSTALL_DIR/ffmpeg/bin" ]; then
             FFMPEG_PATH="$INSTALL_DIR/ffmpeg/bin"
@@ -156,6 +187,14 @@ download_ffmpeg() {
 create_service() {
     echo "🔹 Creating systemd service..."
     FFMPEG_PATH=$(cat /tmp/ffmpeg_path_detected 2>/dev/null || echo "$INSTALL_DIR/ffmpeg")
+
+    DETECTED_BINARY=$(detect_ersatztv_binary)
+    if [[ -z "$DETECTED_BINARY" ]]; then
+        echo "❌ Cannot find ErsatzTV binary in $INSTALL_DIR (tried ErsatzTV, ErsatzTV-Legacy)."
+        exit 1
+    fi
+    echo "✅ Detected binary: $DETECTED_BINARY"
+
     cat <<EOF > /etc/systemd/system/${SERVICE_NAME}.service
 [Unit]
 Description=ErsatzTV Service
@@ -164,7 +203,7 @@ After=network.target
 [Service]
 User=ersatztv
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/ErsatzTV --data-folder $DATA_FOLDER
+ExecStart=$DETECTED_BINARY --data-folder $DATA_FOLDER
 ExecStop=/bin/kill -s SIGINT \$MAINPID
 Restart=on-failure
 RestartSec=5
@@ -174,10 +213,55 @@ Environment=PATH=$FFMPEG_PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    if [[ "$SELINUX_ENFORCING" == true ]]; then
+        echo "🔹 Adjusting SELinux contexts for /opt/ersatztv and /home/ersatztv..."
+        chcon -R -t bin_t /opt/ersatztv 2>/dev/null || true
+        chcon -R -t home_root_t /home/ersatztv 2>/dev/null || true
+    fi
+
     rm -f /tmp/ffmpeg_path_detected
     systemctl daemon-reload
     systemctl enable $SERVICE_NAME
     systemctl restart $SERVICE_NAME
+    configure_firewall
+}
+
+configure_firewall() {
+    echo "🔹 Checking firewall status and allowing port 8409..."
+
+    # --- Fedora / RHEL / firewalld ------------------------------------------
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        if systemctl is-active --quiet firewalld; then
+            echo "   Detected firewalld; opening port 8409/tcp..."
+            firewall-cmd --permanent --add-port=8409/tcp >/dev/null 2>&1 || true
+            firewall-cmd --reload >/dev/null 2>&1 || true
+            echo "   ✅ Port 8409 opened in firewalld."
+        else
+            echo "   ℹ️  firewalld not active — skipping."
+        fi
+
+    # --- Debian / Ubuntu / ufw ----------------------------------------------
+    elif command -v ufw >/dev/null 2>&1; then
+        if ufw status | grep -q "Status: active"; then
+            echo "   Detected ufw; allowing port 8409/tcp..."
+            ufw allow 8409/tcp >/dev/null 2>&1 || true
+            echo "   ✅ Port 8409 opened in ufw."
+        else
+            echo "   ℹ️  ufw is installed but not active — skipping."
+        fi
+
+    else
+        echo "   ⚙️  No known firewall manager detected (firewalld/ufw)."
+    fi
+
+    # Display common accessible IP so users know where to connect
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -n "$HOST_IP" ]; then
+        echo "🌐 ErsatzTV web interface: http://$HOST_IP:8409"
+    else
+        echo "🌐 ErsatzTV web interface: http://<server-ip>:8409"
+    fi
 }
 
 install_updater() {
@@ -187,7 +271,8 @@ install_updater() {
 set -e
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
-GITHUB_REPO="ErsatzTV/legacy"
+DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
+GITHUB_REPO="ErsatzTV/ErsatzTV"
 BACKUP_DIR="/opt/ersatztv_backup_$(date +%Y%m%d_%H%M%S)"
 LOCK_FILE="/tmp/ersatztv_update.lock"
 ARCH=$(uname -m)
@@ -205,8 +290,22 @@ LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 cd "$INSTALL_DIR"
 curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
 tar -xzf ersatztv_latest.tar.gz --strip-components=1
-rm ersatztv_latest.tar.gz
+rm -f ersatztv_latest.tar.gz
 chown -R ersatztv:ersatztv "$INSTALL_DIR"
+# Binary detection is inlined here because this script lives in a single-quoted
+# heredoc in the installer and cannot call the installer's detect_ersatztv_binary().
+DETECTED_BINARY=""
+if [[ -x "$INSTALL_DIR/ErsatzTV" ]]; then
+    DETECTED_BINARY="$INSTALL_DIR/ErsatzTV"
+elif [[ -x "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+    DETECTED_BINARY="$INSTALL_DIR/ErsatzTV-Legacy"
+fi
+if [[ -z "$DETECTED_BINARY" ]]; then
+    echo "❌ Cannot find ErsatzTV binary in $INSTALL_DIR after update (tried ErsatzTV, ErsatzTV-Legacy)."
+    exit 1
+fi
+echo "✅ Detected binary: $DETECTED_BINARY"
+sudo sed -i "s|^ExecStart=.*|ExecStart=$DETECTED_BINARY --data-folder $DATA_FOLDER|" /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo sed -i 's/^Restart=no/Restart=on-failure/' /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl start $SERVICE_NAME
@@ -226,31 +325,74 @@ EOS
 install_retroiptvguide() {
     echo "🔹 Installing RetroIPTVGuide..."
     cd /opt
-    if [[ -d "RetroIPTVGuide" ]]; then
-        echo "ℹ️  RetroIPTVGuide already exists. Pulling latest..."
-        cd RetroIPTVGuide && git pull
+
+    # Download latest testing branch unified installer
+    RETRO_SCRIPT_URL="https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/testing/retroiptv_linux.sh"
+    RETRO_SCRIPT_PATH="/opt/retroiptv_linux.sh"
+
+    echo "➡️  Fetching RetroIPTVGuide unified installer..."
+    curl -fsSL "$RETRO_SCRIPT_URL" -o "$RETRO_SCRIPT_PATH"
+    chmod +x "$RETRO_SCRIPT_PATH"
+
+    echo "🧩 Launching RetroIPTVGuide installer..."
+    if [[ $EUID -eq 0 ]]; then
+        bash -c "bash $RETRO_SCRIPT_PATH install < /dev/tty"
     else
-        git clone https://github.com/thehack904/RetroIPTVGuide.git
-        cd RetroIPTVGuide
+        sudo bash -c "bash $RETRO_SCRIPT_PATH install < /dev/tty"
     fi
-    #sudo chmod +x install.sh
-    #sudo bash -i ./install.sh
-	echo "yes" | sudo bash ./install.sh
+
     echo "✅ RetroIPTVGuide installation complete."
 }
 
 uninstall_retroiptvguide() {
-        echo ""
-        echo "🔹 Uninstalling RetroIPTVGuide..."
-        if [[ -d "/home/iptv/iptv-server" && -f "/home/iptv/iptv-server/uninstall.sh" ]]; then
-            sudo bash -i /home/iptv/iptv-server/uninstall.sh
-	    if [[ -d "/opt/RetroIPTVGuide" ]]; then
-		sudo rm -rf /opt/RetroIPTVGuide
-	    fi
-            echo "✅ RetroIPTVGuide uninstallation complete."
+    echo "🔹 Uninstalling RetroIPTVGuide..."
+    RETRO_SCRIPT_PATH="/opt/retroiptv_linux.sh"
+
+    # If the unified installer already exists, reuse it
+    if [[ -f "$RETRO_SCRIPT_PATH" ]]; then
+        echo "➡️  Running built-in uninstaller..."
+        if [[ $EUID -eq 0 ]]; then
+            bash -c "bash $RETRO_SCRIPT_PATH uninstall < /dev/tty"
         else
-            echo "⚠️ RetroIPTVGuide not found or uninstall.sh missing."
+            sudo bash -c "bash $RETRO_SCRIPT_PATH uninstall < /dev/tty"
         fi
+    elif [[ -d "/home/iptv/iptv-server" && -f "/home/iptv/iptv-server/uninstall.sh" ]]; then
+        echo "➡️  Fallback: Running legacy uninstaller..."
+        sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && sudo bash uninstall.sh"
+    else
+        echo "⚠️  No RetroIPTVGuide uninstaller found."
+    fi
+
+    echo "✅ RetroIPTVGuide uninstallation complete."
+}
+
+remove_firewall_rule() {
+    echo "🔹 Checking firewall to remove port 8409..."
+
+    # --- Fedora / RHEL / firewalld ------------------------------------------
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        if systemctl is-active --quiet firewalld; then
+            echo "   Detected firewalld; removing port 8409/tcp..."
+            firewall-cmd --permanent --remove-port=8409/tcp >/dev/null 2>&1 || true
+            firewall-cmd --reload >/dev/null 2>&1 || true
+            echo "   ✅ Port 8409 removed from firewalld."
+        else
+            echo "   ℹ️  firewalld not active — skipping."
+        fi
+
+    # --- Debian / Ubuntu / ufw ----------------------------------------------
+    elif command -v ufw >/dev/null 2>&1; then
+        if ufw status | grep -q "Status: active"; then
+            echo "   Detected ufw; removing port 8409/tcp..."
+            ufw delete allow 8409/tcp >/dev/null 2>&1 || true
+            echo "   ✅ Port 8409 removed from ufw."
+        else
+            echo "   ℹ️  ufw installed but not active — skipping."
+        fi
+
+    else
+        echo "   ⚙️  No known firewall manager detected (firewalld/ufw)."
+    fi
 }
 
 verify_startup() {
@@ -290,8 +432,9 @@ uninstall_ersatztv() {
         echo "⚠️ Purge mode enabled — removing ersatztv user and home directory..."
         userdel -r ersatztv 2>/dev/null || true
         echo "✅ ersatztv user and all data removed."
-    else
-        read -rp "Do you also want to remove the 'ersatztv' user and its home directory? (y/N): " confirm
+    elif [ -t 0 ]; then
+        # Interactive terminal, safe to prompt
+        read -rp "Do you also want to remove the 'ersatztv' user and its home directory? (y/N): " confirm || true
         confirm=${confirm,,}
         if [[ "$confirm" == "y" || "$confirm" == "yes" ]]; then
             echo "⚠️ Removing ersatztv user and all associated data..."
@@ -300,8 +443,46 @@ uninstall_ersatztv() {
         else
             echo "ℹ️ Keeping ersatztv user and home directory at /home/ersatztv"
         fi
+    else
+        # Non-interactive (piped curl/bash)
+        echo "ℹ️ Non-interactive mode detected — keeping ersatztv user and home directory."
     fi
+
+    remove_firewall_rule
+
     echo "✅ ErsatzTV has been uninstalled."
+}
+
+show_final_summary() {
+    local server_ip
+    server_ip=$(hostname -I | awk '{print $1}')
+
+    echo ""
+    echo "============================================================"
+    echo " ✅ Installation Complete!"
+    echo "============================================================"
+    echo ""
+    echo "🌐 ErsatzTV web interface: http://${server_ip}:8409"
+    if [[ "$1" == "retro" ]]; then
+        echo "🌐 RetroIPTVGuide web interface: http://${server_ip}:5000"
+        echo "       - Default login: admin / strongpassword123"
+        echo "       NOTE: This is a **BETA build**."
+        echo "       Do NOT expose RetroIPTVGuide directly to the public internet."
+    fi
+    echo ""
+    echo "🧩 Services installed:"
+    echo "   • ersatztv.service  → manages ErsatzTV"
+    if [[ "$1" == "retro" ]]; then
+        echo "   • iptv-server.service → manages RetroIPTVGuide"
+    fi
+    echo ""
+    echo "Use the following to manage services:"
+    echo "   sudo systemctl status ersatztv"
+    if [[ "$1" == "retro" ]]; then
+        echo "   sudo systemctl status iptv-server"
+    fi
+    echo ""
+    echo "============================================================"
 }
 
 # --- Main Execution ----------------------------------------------------------
@@ -320,11 +501,12 @@ case "$ACTION" in
         install_updater
         verify_startup
 
-        if [[ "$OPTION1" == "--retroiptvguide" || "$OPTION2" == "--retroiptvguide" ]]; then
+	if [[ "$OPTION1" == "--retroiptvguide" || "$OPTION2" == "--retroiptvguide" ]]; then
             install_retroiptvguide
+            show_final_summary "retro"
+        else
+            show_final_summary
         fi
-
-        echo "✅ Installation complete!"
         ;;
     uninstall)
         check_root
@@ -337,4 +519,3 @@ case "$ACTION" in
         show_usage
         ;;
 esac
-

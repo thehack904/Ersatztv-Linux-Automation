@@ -138,6 +138,13 @@ select_ersatztv_version() {
         installed_tag=$(cat "$ERSATZTV_TAG_FILE" 2>/dev/null || echo "")
     fi
 
+    # Fetch the previous release from GitHub (only when a versioned tag is installed)
+    local prev_tag=""
+    if [[ -n "$installed_tag" ]] && _is_versioned_tag "$installed_tag"; then
+        echo "🔍 Checking available releases..."
+        prev_tag=$(_fetch_previous_github_tag "$installed_tag")
+    fi
+
     echo ""
     echo "📦 Select which ErsatzTV version to install:"
     echo "   1) develop  — latest development build  [DEFAULT, recommended]"
@@ -145,6 +152,9 @@ select_ersatztv_version() {
     echo "   3) 26.4     — release 26.4  ⚠️  known WebUI/playout bug"
     echo "   4) 26.3     — release 26.3  (stable)"
     echo "   5) custom   — enter any GitHub release tag manually"
+    if [[ -n "$prev_tag" ]]; then
+        echo "   6) ⬇️  downgrade  — install $prev_tag (one version behind currently installed $installed_tag)"
+    fi
     echo ""
     if [[ -n "$installed_tag" ]]; then
         echo "   Currently installed: $installed_tag"
@@ -152,8 +162,10 @@ select_ersatztv_version() {
     fi
 
     local choice=""
+    local prompt_range="1-5"
+    [[ -n "$prev_tag" ]] && prompt_range="1-6"
     if [ -t 0 ]; then
-        read -rp "Enter choice [1-5, or press Enter for default 'develop']: " choice
+        read -rp "Enter choice [$prompt_range, or press Enter for default 'develop']: " choice
     fi
     choice="${choice:-1}"
 
@@ -177,15 +189,33 @@ select_ersatztv_version() {
                 SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
             fi
             ;;
+        6)
+            if [[ -n "$prev_tag" ]]; then
+                SELECTED_TAG="$prev_tag"
+            else
+                echo "⚠️  Invalid choice '$choice' — using default: $DEFAULT_ERSATZTV_TAG"
+                SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
+            fi
+            ;;
         *)
             echo "⚠️  Invalid choice '$choice' — using default: $DEFAULT_ERSATZTV_TAG"
             SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
             ;;
     esac
 
+    # Announce the operation type and warn clearly when downgrading
     if [[ -n "$installed_tag" && "$SELECTED_TAG" != "$installed_tag" ]]; then
-        echo "ℹ️  Changing installed tag: $installed_tag → $SELECTED_TAG"
-        echo "   Your config and data will NOT be removed."
+        if _tag_is_older_than "$SELECTED_TAG" "$installed_tag"; then
+            echo ""
+            echo "  ⬇️  DOWNGRADE: $installed_tag → $SELECTED_TAG"
+            echo "  ⚠️  The ErsatzTV database schema is generally NOT backward-compatible."
+            echo "     Your settings and config files will be preserved."
+            echo "     A backup of your data folder will be created automatically before"
+            echo "     the downgrade proceeds."
+        else
+            echo "ℹ️  Changing installed tag: $installed_tag → $SELECTED_TAG"
+            echo "   Your config and data will NOT be removed."
+        fi
     fi
 
     _warn_if_known_buggy_tag "$SELECTED_TAG"
@@ -222,9 +252,91 @@ _normalize_github_tag() {
     fi
 }
 
+# Returns 0 (true) if $1 looks like a versioned release tag (e.g. 26.4, v26.4.0).
+# Returns 1 for pseudo-tags like develop/latest.
+_is_versioned_tag() {
+    [[ "$1" =~ ^v?[0-9]+\.[0-9]+ ]]
+}
+
+# Returns 0 (true) if version tag $1 is strictly older than version tag $2.
+# Comparison uses major.minor integers; patch component is ignored.
+# Returns 1 when either tag is a pseudo-tag (develop/latest) or not a version.
+_tag_is_older_than() {
+    local a="$1" b="$2"
+    _is_versioned_tag "$a" || return 1
+    _is_versioned_tag "$b" || return 1
+    # Strip leading 'v', then extract major and minor (ignore patch)
+    local va="${a#v}" vb="${b#v}"
+    local amaj amin bmaj bmin
+    amaj="${va%%.*}"
+    local a_rest="${va#*.}"; amin="${a_rest%%.*}"
+    bmaj="${vb%%.*}"
+    local b_rest="${vb#*.}"; bmin="${b_rest%%.*}"
+    if [[ "$amaj" -lt "$bmaj" ]]; then return 0
+    elif [[ "$amaj" -eq "$bmaj" && "$amin" -lt "$bmin" ]]; then return 0
+    fi
+    return 1
+}
+
+# Fetches the GitHub release tag immediately older than $1 in the ErsatzTV/legacy
+# releases list. Returns the user-friendly short form (e.g. "26.3"), or empty string
+# when no previous release is found or the tag is a pseudo-tag.
+_fetch_previous_github_tag() {
+    local current_tag="$1"
+    _is_versioned_tag "$current_tag" || { echo ""; return; }
+    local resolved
+    resolved=$(_normalize_github_tag "$current_tag")
+    local all_tags
+    all_tags=$(curl -s --max-time 8 "https://api.github.com/repos/$GITHUB_REPO/releases" \
+        | grep '"tag_name"' | cut -d '"' -f 4) || true
+    [[ -z "$all_tags" ]] && { echo ""; return; }
+    local found=false
+    while IFS= read -r tag; do
+        if [[ "$found" == true ]]; then
+            # Convert GitHub tag format (v26.3.0) to user-friendly form (26.3)
+            if [[ "$tag" =~ ^v([0-9]+\.[0-9]+)\.0$ ]]; then
+                echo "${BASH_REMATCH[1]}"
+            else
+                echo "$tag"
+            fi
+            return
+        fi
+        [[ "$tag" == "$resolved" ]] && found=true
+    done <<< "$all_tags"
+    echo ""
+}
+
+# Creates a timestamped backup of the ErsatzTV data folder under /opt/.
+# Called automatically before a downgrade to protect the user's database.
+backup_data_folder() {
+    local backup_dir="/opt/ersatztv_data_backup_$(date +%Y%m%d_%H%M%S)"
+    echo "📦 Backing up ErsatzTV data to $backup_dir ..."
+    cp -a "$DATA_FOLDER" "$backup_dir" 2>/dev/null || true
+    if [[ -d "$backup_dir" ]]; then
+        echo "✅ Data backup created at $backup_dir"
+        echo "   To restore: sudo cp -a ${backup_dir}/. ${DATA_FOLDER}/"
+    else
+        echo "⚠️  Data backup could not be created — proceeding with downgrade anyway."
+    fi
+}
+
 download_ersatztv() {
     local tag="${SELECTED_TAG:-$DEFAULT_ERSATZTV_TAG}"
     echo "🔹 Downloading ErsatzTV tag '$tag' for Linux ($ARCH_SUFFIX)..."
+
+    # Detect downgrade and back up data before replacing binaries
+    if [[ -f "$ERSATZTV_TAG_FILE" ]]; then
+        local installed_tag
+        installed_tag=$(cat "$ERSATZTV_TAG_FILE" 2>/dev/null || echo "")
+        if [[ -n "$installed_tag" ]] && _tag_is_older_than "$tag" "$installed_tag"; then
+            echo ""
+            echo "  ⬇️  DOWNGRADE DETECTED: $installed_tag → $tag"
+            echo "  ⚠️  Your ErsatzTV database schema may not be backward-compatible."
+            echo "  📦 Creating a backup of your data folder before proceeding..."
+            backup_data_folder
+            echo ""
+        fi
+    fi
 
     local api_url download_url
     case "$tag" in

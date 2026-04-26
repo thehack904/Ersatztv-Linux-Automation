@@ -5,7 +5,7 @@
 # Unified installer, updater, and uninstaller for ErsatzTV.
 # Compatible with x64 and ARM64 Linux distributions.
 # ---------------------------------------------------------
-VERSION="v1.2.0"
+VERSION="v1.2.1"
 
 set -e
 
@@ -22,6 +22,13 @@ DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
 GITHUB_REPO="ErsatzTV/ErsatzTV"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 UPDATER_PATH="/usr/local/bin/update_linux_ersatztv.sh"
+
+# --- Version selection -------------------------------------------------------
+# The default tag matches the recommended GHCR image: ghcr.io/ersatztv/legacy:develop
+DEFAULT_ERSATZTV_TAG="develop"
+ERSATZTV_IMAGE_BASE="ghcr.io/ersatztv/legacy"
+ERSATZTV_TAG_FILE="$INSTALL_DIR/.installed_tag"
+SELECTED_TAG=""
 
 # --- Detect architecture -----------------------------------------------------
 ARCH=$(uname -m)
@@ -67,6 +74,15 @@ show_usage() {
     echo "Optional flags:"
     echo "  --retroiptvguide  Install RetroIPTVGuide after ErsatzTV setup"
     echo "  --purge           Remove all data under $DATA_FOLDER during uninstall"
+    echo
+    echo "Version selection:"
+    echo "  Set the ERSATZTV_VERSION environment variable to skip the interactive prompt."
+    echo "  Examples:"
+    echo "    ERSATZTV_VERSION=develop   sudo -E bash install_linux_ersatztv.sh install"
+    echo "    ERSATZTV_VERSION=26.3      sudo -E bash install_linux_ersatztv.sh install"
+    echo "    ERSATZTV_VERSION=26.3      sudo -E bash install_linux_ersatztv.sh update"
+    echo
+    echo "  Available tags: develop (default), latest, 26.4 (⚠️ buggy), 26.3, or any GitHub release tag."
     exit 1
 }
 
@@ -85,36 +101,123 @@ check_root() {
 
 # --- Stage 1: Version Check ---------------------------------------------------
 check_existing_version() {
-    if [[ -f "$INSTALL_DIR/ErsatzTV" ]]; then
-        echo "🔍 Checking currently installed ErsatzTV version..."
-        INSTALLED_VERSION=$(sudo journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}')
-        if [ -z "$INSTALLED_VERSION" ]; then
-            echo "⚠️  Unable to determine installed version from logs."
-            INSTALLED_VERSION="(unknown)"
-        fi
+    local binary_found=false
+    if [[ -f "$INSTALL_DIR/ErsatzTV" || -f "$INSTALL_DIR/ErsatzTV-Legacy" ]]; then
+        binary_found=true
+    fi
 
-        LATEST_VERSION=$(curl -s https://api.github.com/repos/$GITHUB_REPO/releases/latest | grep tag_name | cut -d '"' -f 4)
-        if [ -z "$LATEST_VERSION" ]; then
-            echo "❌ Failed to retrieve latest release info from GitHub."
-            return
-        fi
+    if [[ "$binary_found" == true ]]; then
+        echo "🔍 ErsatzTV is currently installed."
 
-        echo "   Installed: $INSTALLED_VERSION"
-        echo "   Latest:    $LATEST_VERSION"
-
-        if [[ "${INSTALLED_VERSION%%-*}" == "$LATEST_VERSION" ]]; then
-            echo "✅ ErsatzTV is already up-to-date ($INSTALLED_VERSION)"
-            read -rp "Would you like to reinstall this version anyway? (y/N): " confirm
-            confirm=${confirm,,}
-            if [[ "$confirm" != "y" && "$confirm" != "yes" ]]; then
-                echo "⏹️  Installation aborted by user (already up-to-date)."
-                exit 0
+        # Prefer the tag file written by this installer on previous runs
+        if [[ -f "$ERSATZTV_TAG_FILE" ]]; then
+            local current_tag
+            current_tag=$(cat "$ERSATZTV_TAG_FILE" 2>/dev/null || echo "")
+            if [[ -n "$current_tag" ]]; then
+                echo "   Installed tag : $current_tag  (${ERSATZTV_IMAGE_BASE}:${current_tag})"
             fi
-            echo "🔁 Proceeding with reinstall of current version..."
         else
-            echo "⚠️  Update available — proceeding with new installation."
+            # Fall back to journal-based version detection for pre-v1.2.1 installs
+            local log_version
+            log_version=$(journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}' || echo "")
+            if [[ -n "$log_version" ]]; then
+                echo "   Installed version: $log_version"
+            else
+                echo "   ⚠️  Cannot determine installed version from logs."
+            fi
         fi
     fi
+}
+
+# --- Warn about tags with known issues ----------------------------------------
+_warn_if_known_buggy_tag() {
+    local tag="$1"
+    if [[ "$tag" == "26.4" ]]; then
+        echo ""
+        echo "  ⚠️  WARNING: Tag '26.4' has a known WebUI/playout creation bug."
+        echo "     It is strongly recommended to use '26.3' or 'develop' instead."
+        echo "     Proceeding in 5 seconds (press Ctrl+C to abort)..."
+        sleep 5
+        echo ""
+    fi
+}
+
+# --- Stage 2: Version selection -----------------------------------------------
+select_ersatztv_version() {
+    # Non-interactive: honour the ERSATZTV_VERSION environment variable
+    if [[ -n "${ERSATZTV_VERSION:-}" ]]; then
+        local env_tag="${ERSATZTV_VERSION// /}"   # strip any accidental whitespace
+        if [[ -z "$env_tag" ]]; then
+            echo "⚠️  ERSATZTV_VERSION is set but blank — using default: $DEFAULT_ERSATZTV_TAG"
+            SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
+        else
+            SELECTED_TAG="$env_tag"
+            echo "ℹ️  ERSATZTV_VERSION is set — using tag: $SELECTED_TAG  (${ERSATZTV_IMAGE_BASE}:${SELECTED_TAG})"
+        fi
+        _warn_if_known_buggy_tag "$SELECTED_TAG"
+        return
+    fi
+
+    # Show installed tag for context (downgrade awareness)
+    local installed_tag=""
+    if [[ -f "$ERSATZTV_TAG_FILE" ]]; then
+        installed_tag=$(cat "$ERSATZTV_TAG_FILE" 2>/dev/null || echo "")
+    fi
+
+    echo ""
+    echo "📦 Select which ErsatzTV version to install:"
+    echo "   1) develop  — latest development build  [DEFAULT, recommended]"
+    echo "   2) latest   — latest stable GitHub release"
+    echo "   3) 26.4     — release 26.4  ⚠️  known WebUI/playout bug"
+    echo "   4) 26.3     — release 26.3  (stable)"
+    echo "   5) custom   — enter any GitHub release tag manually"
+    echo ""
+    if [[ -n "$installed_tag" ]]; then
+        echo "   Currently installed: $installed_tag"
+        echo ""
+    fi
+
+    local choice=""
+    if [ -t 0 ]; then
+        read -rp "Enter choice [1-5, or press Enter for default 'develop']: " choice
+    fi
+    choice="${choice:-1}"
+
+    case "$choice" in
+        1|develop)  SELECTED_TAG="develop" ;;
+        2|latest)   SELECTED_TAG="latest"  ;;
+        3|26.4)     SELECTED_TAG="26.4"    ;;
+        4|26.3)     SELECTED_TAG="26.3"    ;;
+        5|custom)
+            if [ -t 0 ]; then
+                read -rp "Enter custom tag (e.g. 26.2, v0.8.0): " custom_tag
+                custom_tag="${custom_tag// /}"
+                if [[ -z "$custom_tag" ]]; then
+                    echo "⚠️  No tag entered — using default: $DEFAULT_ERSATZTV_TAG"
+                    SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
+                else
+                    SELECTED_TAG="$custom_tag"
+                fi
+            else
+                echo "⚠️  Non-interactive mode with no ERSATZTV_VERSION set — using default: $DEFAULT_ERSATZTV_TAG"
+                SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
+            fi
+            ;;
+        *)
+            echo "⚠️  Invalid choice '$choice' — using default: $DEFAULT_ERSATZTV_TAG"
+            SELECTED_TAG="$DEFAULT_ERSATZTV_TAG"
+            ;;
+    esac
+
+    # Announce when the tag is being changed (e.g. upgrade or downgrade)
+    if [[ -n "$installed_tag" && "$SELECTED_TAG" != "$installed_tag" ]]; then
+        echo "ℹ️  Changing installed tag: $installed_tag → $SELECTED_TAG"
+        echo "   Your config and data will NOT be removed."
+    fi
+
+    _warn_if_known_buggy_tag "$SELECTED_TAG"
+    echo "✅ Selected tag: $SELECTED_TAG  (${ERSATZTV_IMAGE_BASE}:${SELECTED_TAG})"
+    echo ""
 }
 
 create_user_and_dirs() {
@@ -135,19 +238,53 @@ create_user_and_dirs() {
 }
 
 download_ersatztv() {
-    echo "🔹 Downloading latest ErsatzTV release for Linux ($ARCH_SUFFIX)..."
-    LATEST_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" \
-        | grep "browser_download_url" | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" | cut -d '"' -f 4)
-    if [ -z "$LATEST_URL" ]; then
-        echo "❌ Could not find a matching ErsatzTV release for $ARCH_SUFFIX"
+    local tag="${SELECTED_TAG:-$DEFAULT_ERSATZTV_TAG}"
+    echo "🔹 Downloading ErsatzTV tag '$tag' for Linux ($ARCH_SUFFIX)..."
+
+    local api_url download_url
+    case "$tag" in
+        develop)
+            # Most recent release including pre-releases
+            api_url="https://api.github.com/repos/$GITHUB_REPO/releases"
+            download_url=$(curl -s "$api_url" \
+                | grep "browser_download_url" \
+                | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" \
+                | head -n 1 \
+                | cut -d '"' -f 4)
+            ;;
+        latest)
+            api_url="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+            download_url=$(curl -s "$api_url" \
+                | grep "browser_download_url" \
+                | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" \
+                | cut -d '"' -f 4)
+            ;;
+        *)
+            # Specific release tag (e.g. 26.3, 26.4, v0.8.0, or any custom tag)
+            api_url="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$tag"
+            download_url=$(curl -s "$api_url" \
+                | grep "browser_download_url" \
+                | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" \
+                | cut -d '"' -f 4)
+            ;;
+    esac
+
+    if [ -z "$download_url" ]; then
+        echo "❌ Could not find a matching ErsatzTV release for tag '$tag' ($ARCH_SUFFIX)"
+        echo "   Check available releases at: https://github.com/$GITHUB_REPO/releases"
         exit 1
     fi
+
     cd "$INSTALL_DIR"
-    echo "➡️  Fetching: $LATEST_URL"
-    curl -L -o ersatztv_latest.tar.gz "$LATEST_URL"
+    echo "➡️  Fetching: $download_url"
+    curl -L -o ersatztv_latest.tar.gz "$download_url"
     tar -xzf ersatztv_latest.tar.gz --strip-components=1
     rm -f ersatztv_latest.tar.gz
     chown -R ersatztv:ersatztv "$INSTALL_DIR" /home/ersatztv/.local
+
+    # Record the installed tag so future runs can display it
+    echo "$tag" > "$ERSATZTV_TAG_FILE"
+    chown ersatztv:ersatztv "$ERSATZTV_TAG_FILE" 2>/dev/null || true
 }
 
 detect_ersatztv_binary() {
@@ -642,6 +779,7 @@ case "$ACTION" in
     install|update)
         check_root
         check_existing_version
+        select_ersatztv_version
         create_user_and_dirs
         download_ersatztv
         download_ffmpeg

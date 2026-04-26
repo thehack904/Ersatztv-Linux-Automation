@@ -1,0 +1,83 @@
+name: Build Installer (Base)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-rc*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get update -y && sudo apt-get install -y makeself gpg
+
+      - name: Build .run
+        run: bash packaging/make-installer.sh
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign checksums
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          KEYID=$(gpg --list-secret-keys --keyid-format=long | awk '/sec/{print $2}' | sed 's|.*/||' | head -n1)
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+              --local-user "$KEYID" --armor --detach-sign -o checksums.txt.asc checksums.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          files: |
+            ersatztv-installer.run
+            checksums.txt
+            checksums.txt.asc
+
+      # ======================================
+      # 🧱 Phase 6 - Security Layers
+      # ======================================
+      - name: 🕵️ Run Gitleaks (Secret Scanner)
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --no-banner --redact
+
+      - name: 🔍 Run Trivy (Vulnerability Scanner)
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+
+      - name: 🧾 Generate SBOM
+        uses: anchore/syft-action@v1
+        with:
+          image: "."
+          output: "sbom.json"
+
+      - name: 🛡️ Run OSV Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: "."
+          fail-on: "vulnerabilities"
+
+      - name: 🧠 ShellCheck (Lint Bash scripts)
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./"
+
+      - name: 🔒 PII Guard
+        run: |
+          chmod +x scripts/pii_guard.sh
+          ./scripts/pii_guard.sh
+

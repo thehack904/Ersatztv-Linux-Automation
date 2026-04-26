@@ -1,0 +1,21 @@
+name: Test Update Path (v1.1.0 → v1.2.0)
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  test-update-path:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make test script executable
+        run: chmod +x tests/test_update_path_v110_to_v120.sh
+
+      - name: Run update-path test
+        run: bash tests/test_update_path_v110_to_v120.sh

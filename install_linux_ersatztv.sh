@@ -221,6 +221,7 @@ EOF
     fi
 
     rm -f /tmp/ffmpeg_path_detected
+    preflight_check "$DETECTED_BINARY"
     systemctl daemon-reload
     systemctl enable $SERVICE_NAME
     systemctl restart $SERVICE_NAME
@@ -307,6 +308,69 @@ fi
 echo "✅ Detected binary: $DETECTED_BINARY"
 sudo sed -i "s|^ExecStart=.*|ExecStart=$DETECTED_BINARY --data-folder $DATA_FOLDER|" /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
 sudo sed -i 's/^Restart=no/Restart=on-failure/' /etc/systemd/system/${SERVICE_NAME}.service 2>/dev/null || true
+# Preflight validation is inlined here because this script lives in a single-quoted
+# heredoc in the installer and cannot call the installer's preflight_check() function.
+echo "🔍 Running preflight validation..."
+PREFLIGHT_ERRORS=0
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo "❌ Install directory $INSTALL_DIR does not exist."
+    PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+else
+    echo "✅ Install directory $INSTALL_DIR exists."
+fi
+if [[ ! -e "$DETECTED_BINARY" ]]; then
+    echo "❌ Expected executable $DETECTED_BINARY does not exist."
+    PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+else
+    echo "✅ Executable $DETECTED_BINARY exists."
+fi
+if [[ ! -x "$DETECTED_BINARY" ]]; then
+    echo "❌ Executable $DETECTED_BINARY does not have execute permission."
+    PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+else
+    echo "✅ Executable $DETECTED_BINARY has execute permission."
+fi
+if [[ ! -d "$DATA_FOLDER" ]]; then
+    echo "❌ Data folder $DATA_FOLDER does not exist."
+    PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+else
+    echo "✅ Data folder $DATA_FOLDER exists."
+fi
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+if [[ -f "$SERVICE_FILE" ]]; then
+    SERVICE_EXEC=$(grep -E '^ExecStart=' "$SERVICE_FILE" | sed 's/^ExecStart=//' | awk '{print $1}')
+    if [[ "$SERVICE_EXEC" != "$DETECTED_BINARY" ]]; then
+        echo "❌ Service unit ExecStart ($SERVICE_EXEC) does not match installed binary ($DETECTED_BINARY)."
+        PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+    else
+        echo "✅ Service unit references the installed binary."
+    fi
+else
+    echo "⚠️  Service unit $SERVICE_FILE not found (skipping ExecStart check)."
+fi
+if [[ -d "$INSTALL_DIR" ]]; then
+    INSTALL_OWNER=$(stat -c '%U' "$INSTALL_DIR")
+    if [[ "$INSTALL_OWNER" != "ersatztv" ]]; then
+        echo "❌ $INSTALL_DIR is owned by '$INSTALL_OWNER', expected 'ersatztv'."
+        PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+    else
+        echo "✅ $INSTALL_DIR is owned by ersatztv."
+    fi
+fi
+if [[ -d "$DATA_FOLDER" ]]; then
+    DATA_OWNER=$(stat -c '%U' "$DATA_FOLDER")
+    if [[ "$DATA_OWNER" != "ersatztv" ]]; then
+        echo "❌ $DATA_FOLDER is owned by '$DATA_OWNER', expected 'ersatztv'."
+        PREFLIGHT_ERRORS=$((PREFLIGHT_ERRORS + 1))
+    else
+        echo "✅ $DATA_FOLDER is owned by ersatztv."
+    fi
+fi
+if [[ "$PREFLIGHT_ERRORS" -gt 0 ]]; then
+    echo "❌ Preflight validation failed with $PREFLIGHT_ERRORS error(s). Service restart aborted."
+    exit 1
+fi
+echo "✅ All preflight checks passed."
 sudo systemctl daemon-reload
 sudo systemctl start $SERVICE_NAME
 for i in {1..20}; do
@@ -393,6 +457,90 @@ remove_firewall_rule() {
     else
         echo "   ⚙️  No known firewall manager detected (firewalld/ufw)."
     fi
+}
+
+preflight_check() {
+    local binary="$1"
+    local preflight_errors=0
+
+    echo "🔍 Running preflight validation..."
+
+    # 1. Install directory must exist
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        echo "❌ Install directory $INSTALL_DIR does not exist."
+        (( preflight_errors++ ))
+    else
+        echo "✅ Install directory $INSTALL_DIR exists."
+    fi
+
+    # 2. Expected executable must exist
+    if [[ ! -e "$binary" ]]; then
+        echo "❌ Expected executable $binary does not exist."
+        (( preflight_errors++ ))
+    else
+        echo "✅ Executable $binary exists."
+    fi
+
+    # 3. Expected executable must have execute permission
+    if [[ ! -x "$binary" ]]; then
+        echo "❌ Executable $binary does not have execute permission."
+        (( preflight_errors++ ))
+    else
+        echo "✅ Executable $binary has execute permission."
+    fi
+
+    # 4. Data folder must exist
+    if [[ ! -d "$DATA_FOLDER" ]]; then
+        echo "❌ Data folder $DATA_FOLDER does not exist."
+        (( preflight_errors++ ))
+    else
+        echo "✅ Data folder $DATA_FOLDER exists."
+    fi
+
+    # 5. Service unit must reference the installed executable
+    local service_file="/etc/systemd/system/${SERVICE_NAME}.service"
+    if [[ -f "$service_file" ]]; then
+        local service_exec
+        service_exec=$(grep -E '^ExecStart=' "$service_file" | sed 's/^ExecStart=//' | awk '{print $1}')
+        if [[ "$service_exec" != "$binary" ]]; then
+            echo "❌ Service unit ExecStart ($service_exec) does not match installed binary ($binary)."
+            (( preflight_errors++ ))
+        else
+            echo "✅ Service unit references the installed binary."
+        fi
+    else
+        echo "⚠️  Service unit $service_file not found (skipping ExecStart check)."
+    fi
+
+    # 6. ersatztv user must own the install directory and data folder
+    if [[ -d "$INSTALL_DIR" ]]; then
+        local install_owner
+        install_owner=$(stat -c '%U' "$INSTALL_DIR")
+        if [[ "$install_owner" != "ersatztv" ]]; then
+            echo "❌ $INSTALL_DIR is owned by '$install_owner', expected 'ersatztv'."
+            (( preflight_errors++ ))
+        else
+            echo "✅ $INSTALL_DIR is owned by ersatztv."
+        fi
+    fi
+
+    if [[ -d "$DATA_FOLDER" ]]; then
+        local data_owner
+        data_owner=$(stat -c '%U' "$DATA_FOLDER")
+        if [[ "$data_owner" != "ersatztv" ]]; then
+            echo "❌ $DATA_FOLDER is owned by '$data_owner', expected 'ersatztv'."
+            (( preflight_errors++ ))
+        else
+            echo "✅ $DATA_FOLDER is owned by ersatztv."
+        fi
+    fi
+
+    if [[ "$preflight_errors" -gt 0 ]]; then
+        echo "❌ Preflight validation failed with $preflight_errors error(s). Service restart aborted."
+        exit 1
+    fi
+
+    echo "✅ All preflight checks passed."
 }
 
 verify_startup() {

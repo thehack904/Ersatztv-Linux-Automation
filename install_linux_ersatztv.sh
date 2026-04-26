@@ -19,7 +19,7 @@ echo "ErsatzTV Linux Automation Installer $VERSION"
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
 DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 UPDATER_PATH="/usr/local/bin/update_linux_ersatztv.sh"
 
@@ -237,6 +237,18 @@ create_user_and_dirs() {
     install -d -o ersatztv -g ersatztv -m 755 "$INSTALL_DIR"
 }
 
+# Convert a bare version number (e.g. "26.4") to the GitHub tag format used by
+# the ErsatzTV/legacy repo (e.g. "v26.4.0"). Tags that already start with "v",
+# or do not match the simple NN.NN pattern, are returned unchanged.
+_normalize_github_tag() {
+    local tag="$1"
+    if [[ "$tag" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo "v${tag}.0"
+    else
+        echo "$tag"
+    fi
+}
+
 download_ersatztv() {
     local tag="${SELECTED_TAG:-$DEFAULT_ERSATZTV_TAG}"
     echo "🔹 Downloading ErsatzTV tag '$tag' for Linux ($ARCH_SUFFIX)..."
@@ -260,8 +272,11 @@ download_ersatztv() {
                 | cut -d '"' -f 4)
             ;;
         *)
-            # Specific release tag (e.g. 26.3, 26.4, v0.8.0, or any custom tag)
-            api_url="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$tag"
+            # Specific release tag. Bare version numbers like "26.4" are normalized
+            # to the format used by the ErsatzTV/legacy repo (e.g. "v26.4.0").
+            local resolved_tag
+            resolved_tag=$(_normalize_github_tag "$tag")
+            api_url="https://api.github.com/repos/$GITHUB_REPO/releases/tags/$resolved_tag"
             download_url=$(curl -s "$api_url" \
                 | grep "browser_download_url" \
                 | grep -E "linux-$ARCH_SUFFIX\.tar\.gz" \
@@ -410,7 +425,7 @@ set -e
 SERVICE_NAME="ersatztv"
 INSTALL_DIR="/opt/ersatztv"
 DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
-GITHUB_REPO="ErsatzTV/ErsatzTV"
+GITHUB_REPO="ErsatzTV/legacy"
 BACKUP_DIR="/opt/ersatztv_backup_$(date +%Y%m%d_%H%M%S)"
 LOCK_FILE="/tmp/ersatztv_update.lock"
 ARCH=$(uname -m)

@@ -1,6 +1,6 @@
 # ErsatzTV-Linux-Automation
 
-![Version](https://img.shields.io/badge/version-v1.2.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-v1.2.1-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-zlib-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=for-the-badge)
 
@@ -23,6 +23,52 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 - 🧱 **Fedora/RHEL Compatibility** – Detects Fedora or RHEL systems, installs required packages (`curl`, `tar`, `git`), and automatically adjusts SELinux file contexts.
 - 💠 **Ubuntu/Debian Compatibility** – Works seamlessly with Debian-based distributions using built-in `apt`, and supports systems with or without `ufw`.
 - 🔥 **Automatic Firewall Configuration** – Opens port `8409/tcp` during installation and removes it on uninstall for both `firewalld` and `ufw` systems.
+- 🏷️ **Version / Tag Selection** – Choose exactly which ErsatzTV release to install or downgrade to, including an optional non-interactive `ERSATZTV_VERSION` environment variable.
+
+---
+
+## 🏷️ Version / Tag Selection
+
+By default the installer downloads the latest **develop** build — the safest and most up-to-date option.  
+During install or update you will be shown an interactive menu:
+
+```
+📦 Select which ErsatzTV version to install:
+   1) develop  — latest development build  [DEFAULT, recommended]
+   2) latest   — latest stable GitHub release
+   3) 26.4     — release 26.4  ⚠️  known WebUI/playout bug
+   4) 26.3     — release 26.3  (stable)
+   5) custom   — enter any GitHub release tag manually
+```
+
+> ⚠️ **26.4 has a known WebUI/playout creation bug.** Use `26.3` or `develop` instead.
+
+### Non-interactive / scripted installs
+
+Set the `ERSATZTV_VERSION` environment variable to bypass the prompt entirely:
+
+**Install the latest develop build (default)**
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install
+```
+
+**Install a specific version (26.3)**
+```bash
+ERSATZTV_VERSION=26.3 sudo -E bash install_linux_ersatztv.sh install
+```
+
+**Downgrade from 26.4 → 26.3** (config and data are preserved)
+```bash
+ERSATZTV_VERSION=26.3 sudo -E bash install_linux_ersatztv.sh update
+```
+
+**Install using a custom / arbitrary tag**
+```bash
+ERSATZTV_VERSION=v0.8.0 sudo -E bash install_linux_ersatztv.sh install
+```
+
+The installer records the installed tag in `/opt/ersatztv/.installed_tag`.  
+On subsequent runs the currently-installed tag is displayed before the selection prompt so you always know what version is live.
 
 ---
 

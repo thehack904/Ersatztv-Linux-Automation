@@ -95,7 +95,7 @@ check_existing_version() {
             fi
         else
             local log_version
-            log_version=$(journalctl -u $SERVICE_NAME 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}' || echo "")
+            log_version=$(journalctl -u $SERVICE_NAME --no-pager -n 500 2>/dev/null | grep "ErsatzTV version" | tail -n 1 | awk '{print $NF}' || echo "")
             if [[ -n "$log_version" ]]; then
                 echo "   Installed version: $log_version"
             else

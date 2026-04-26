@@ -107,6 +107,71 @@ curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation
 During uninstall, the script will also remove the open firewall rule (port `8409/tcp`) if present.
 
 ---
+
+## 🛠️ Troubleshooting
+
+### Service fails to start — `status=203/EXEC`
+
+**What it means**
+
+`systemd` exit code `203/EXEC` means the binary listed in `ExecStart=` inside the service unit cannot be found or executed. This typically happens after an update renames the binary (e.g. from `ErsatzTV-Legacy` to `ErsatzTV`) while the service file still points to the old path.
+
+---
+
+**Step 1 – Check what binaries are actually installed**
+
+```bash
+ls -lah /opt/ersatztv/
+```
+
+Look for the executable file. Depending on the release, it will be named either `ErsatzTV` or `ErsatzTV-Legacy`.
+
+---
+
+**Step 2 – Check what path the service is currently using**
+
+```bash
+systemctl cat ersatztv
+```
+
+Find the `ExecStart=` line. Confirm whether the path it references matches a file that actually exists in `/opt/ersatztv/`.
+
+---
+
+**Step 3 – Correct `ExecStart` to point to the real binary**
+
+If the service still references the old `ErsatzTV-Legacy` name but only `ErsatzTV` exists, run:
+
+```bash
+sudo sed -i 's|/opt/ersatztv/ErsatzTV-Legacy|/opt/ersatztv/ErsatzTV|g' /etc/systemd/system/ersatztv.service
+```
+
+If the actual binary name is different (confirm with `ls -lah /opt/ersatztv/` from Step 1), open the file directly and update the `ExecStart=` line to match the exact binary name you found:
+
+```bash
+sudo nano /etc/systemd/system/ersatztv.service
+# Change the ExecStart= line to:
+#   ExecStart=/opt/ersatztv/<actual-binary-name> --data-folder /home/ersatztv/.local/share/ersatztv
+```
+
+> ⚠️ **Do NOT delete or modify `/home/ersatztv/.local/share/ersatztv/`** during this repair.  
+> That folder contains your database, channel configurations, and all settings.  
+> Deleting it will permanently erase your ErsatzTV data.
+
+---
+
+**Step 4 – Reload systemd and restart the service**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ersatztv
+sudo systemctl status ersatztv --no-pager
+```
+
+A successful start will show `Active: active (running)`. If the service is still failing, re-run **Step 1** to confirm the exact binary name and update `ExecStart=` accordingly in `/etc/systemd/system/ersatztv.service`.
+
+---
+
 For details, see the [CHANGELOG](CHANGELOG.md).
 
 ## 🪪 License

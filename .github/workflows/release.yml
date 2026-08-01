@@ -52,7 +52,7 @@ jobs:
           args: detect --source . --no-banner --redact
 
       - name: 🔍 Run Trivy (Vulnerability Scanner)
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           scan-type: 'fs'
           ignore-unfixed: true
@@ -60,13 +60,13 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: 🧾 Generate SBOM
-        uses: anchore/syft-action@v1
+        uses: anchore/sbom-action@v0
         with:
           image: "."
           output: "sbom.json"
 
       - name: 🛡️ Run OSV Scanner
-        uses: google/osv-scanner-action@v1
+        uses: google/osv-scanner-action@v2.3.8
         with:
           scan-args: "."
           fail-on: "vulnerabilities"

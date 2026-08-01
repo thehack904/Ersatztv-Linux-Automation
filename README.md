@@ -1,13 +1,24 @@
 # ErsatzTV-Linux-Automation
 
-![Version](https://img.shields.io/badge/version-v1.2.1-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-v1.3.0-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-zlib-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=for-the-badge)
 
-**Deploy, manage, and update ErsatzTV with a single command.**
+**Deploy, manage, and update ErsatzTV Legacy with a single command.**
 
-ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV](https://github.com/ErsatzTV/ErsatzTV) on Linux systems.  
+> [!IMPORTANT]
+> **ErsatzTV Legacy only:** This project installs, upgrades, repairs, and removes **ErsatzTV Legacy** from the [`ErsatzTV/legacy`](https://github.com/ErsatzTV/legacy) repository. It does **not** support, install, upgrade, migrate, or manage **ErsatzTV Next**. Do not use this automation on an ErsatzTV Next installation.
+
+ErsatzTV-Linux-Automation is a full automation toolkit for installing, managing, and updating [ErsatzTV Legacy](https://github.com/ErsatzTV/legacy) on Linux systems.  
 It provides a one-command installer, hardened updater, and complete systemd integration to make ErsatzTV deployment truly hands-free.
+
+---
+
+## Compatibility scope
+
+This automation is specifically designed for **ErsatzTV Legacy** and its Linux release artifacts. Release discovery, version selection, managed FFmpeg compatibility, systemd service creation, upgrades, repair, and uninstall behavior all target the [`ErsatzTV/legacy`](https://github.com/ErsatzTV/legacy) project.
+
+**ErsatzTV Next is not supported.** This project does not query ErsatzTV Next releases, recognize its installation layout, or provide a Legacy-to-Next migration path.
 
 ---
 
@@ -17,137 +28,203 @@ It provides a one-command installer, hardened updater, and complete systemd inte
 - 👤 **Dedicated System User** – Runs safely under its own `ersatztv` account.
 - 📂 **Persistent Data Folder** – Stores all settings and database files in `/home/ersatztv/.local/share/ersatztv`.
 - 🧠 **Architecture Detection** – Automatically installs the correct `x64` or `ARM64` binary.
+- 🧩 **Release-Driven FFmpeg Compatibility** – Inspects selected ErsatzTV release metadata (notes + assets) to resolve the required managed `ErsatzTV-ffmpeg` version.
 - 🔁 **Hardened Updater** – Includes rollback protection, graceful shutdown, and lock-file safety.
 - 🔒 **Data-Safe Updates** – Leaves your database and configuration untouched during upgrades.
 - 🚀 **Systemd Integration** – Creates and enables the service automatically for seamless boot startup.
 - 🧱 **Fedora/RHEL Compatibility** – Detects Fedora or RHEL systems, installs required packages (`curl`, `tar`, `git`), and automatically adjusts SELinux file contexts.
 - 💠 **Ubuntu/Debian Compatibility** – Works seamlessly with Debian-based distributions using built-in `apt`, and supports systems with or without `ufw`.
 - 🔥 **Automatic Firewall Configuration** – Opens port `8409/tcp` during installation and removes it on uninstall for both `firewalld` and `ufw` systems.
-- 🏷️ **Version / Tag Selection** – Choose exactly which ErsatzTV release to install or downgrade to, including an optional non-interactive `ERSATZTV_VERSION` environment variable.
+- 🏷️ **Version / Tag Selection** – Choose `develop`, `latest`, or one of the current four published Legacy releases; exact tags remain available non-interactively through `ERSATZTV_VERSION`.
+- 🧠 **Compatibility Cache** – Stores resolved release-to-FFmpeg compatibility data in `/var/lib/ersatztv-linux-automation/compatibility/`.
 
 ---
 
 ## 🏷️ Version / Tag Selection
 
-By default the installer downloads the latest **develop** build — the safest and most up-to-date option.  
-During install or update you will be shown an interactive menu:
+By default, the installer downloads the latest **develop** build. During installation or upgrade, it presents this menu:
 
 ```
-📦 Select which ErsatzTV version to install:
+📦 Select which ErsatzTV Legacy version to install:
    1) develop  — latest development build  [DEFAULT, recommended]
    2) latest   — latest stable GitHub release
-   3) 26.4     — release 26.4  ⚠️  known WebUI/playout bug
-   4) 26.3     — release 26.3  (stable)
-   5) custom   — enter any GitHub release tag manually
+   3) custom   — choose from the current and previous three releases
+   Q) cancel   — exit without making changes
 ```
 
-> ⚠️ **26.4 has a known WebUI/playout creation bug.** Use `26.3` or `develop` instead.
+Older releases are no longer listed as dedicated menu choices. The custom menu lists only the current published Legacy release and the three immediately preceding Legacy releases. That submenu includes **B) Back** to return to the main version menu and **Q) Cancel** to exit before installation or upgrade changes begin. An exact Legacy release tag can also be supplied through `ERSATZTV_VERSION`. ErsatzTV Next releases are never listed or selected.
 
 ### Non-interactive / scripted installs
 
-Set the `ERSATZTV_VERSION` environment variable to bypass the prompt entirely:
+Set `ERSATZTV_VERSION` to bypass the prompt:
 
-**Install the latest develop build (default)**
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install
+ERSATZTV_VERSION=develop sudo -E ersatztv-linux-automation --install
+ERSATZTV_VERSION=latest sudo -E ersatztv-linux-automation --upgrade
+ERSATZTV_VERSION=v26.7.1 sudo -E ersatztv-linux-automation --upgrade
 ```
 
-**Install a specific version (26.3)**
-```bash
-ERSATZTV_VERSION=26.3 sudo -E bash install_linux_ersatztv.sh install
+The installer records the selected tag in `/opt/ersatztv/.installed_tag` and displays it on later runs.
+
+### FFmpeg health-check warning
+
+The automation installs and validates its managed FFmpeg bundle but does **not** modify ErsatzTV's database or saved application settings. After ErsatzTV starts, the installer checks which executables ErsatzTV reports using.
+
+When the health check detects `/usr/bin/ffmpeg`, `/usr/bin/ffprobe`, or cannot confirm the selected executables, the final summary instructs the user to open ErsatzTV **Settings** and verify:
+
+```text
+FFmpeg Path:  /opt/ersatztv/ffmpeg/bin/ffmpeg
+FFprobe Path: /opt/ersatztv/ffmpeg/bin/ffprobe
 ```
 
-**Downgrade from 26.4 → 26.3** (config and data are preserved)
+After saving those settings, restart ErsatzTV:
+
 ```bash
-ERSATZTV_VERSION=26.3 sudo -E bash install_linux_ersatztv.sh update
+sudo systemctl restart ersatztv
 ```
-
-**Install using a custom / arbitrary tag**
-```bash
-ERSATZTV_VERSION=v0.8.0 sudo -E bash install_linux_ersatztv.sh install
-```
-
-The installer records the installed tag in `/opt/ersatztv/.installed_tag`.  
-On subsequent runs the currently-installed tag is displayed before the selection prompt so you always know what version is live.
-
----
 
 ## 🚀 Quick Install (One-Liner)
 
-To install ErsatzTV automatically on any supported Linux system, run:
+To install **ErsatzTV Legacy** automatically on a supported Linux system, run:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --install
 ```
 
 Manual Download / Execute:
 ```bash
-wget https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh
-sudo bash install_linux_ersatztv.sh install
+wget https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh
+sudo bash ersatztv-linux-automation.sh --install
 ```
 
 When complete:
-- ErsatzTV will be installed to `/opt/ersatztv`
-- Downloads latest ErsatzTV compatible FFmpeg
+- ErsatzTV Legacy will be installed to `/opt/ersatztv`
+- Downloads the managed FFmpeg version required by the selected ErsatzTV Legacy release
 - It will run as the `ersatztv` user
 - Automatically configures firewall (if active)
 - Web interface available at:  http://<server-ip>:8409
   
 Optional (add RetroIPTVGuide):
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s install --retroiptvguide
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --install --retroiptvguide
 ```
 When complete:
 - [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide) will be installed
 
 ---
 
-## 🔁 Updating ErsatzTV
+## 🔁 Updating ErsatzTV Legacy
 
-Run the included updater script anytime:
+> This upgrade workflow is for **ErsatzTV Legacy only**. It must not be used to update ErsatzTV Next.
+
+Run the canonical lifecycle command anytime:
 
 (One-Liner)
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s update
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --upgrade
 ```
 Manual
 ```bash
-  sudo update_linux_ersatztv.sh
+  sudo ersatztv-linux-automation --upgrade
 ```
 
 **Updater Features**
 - Gracefully stops the systemd service  
 - Disables auto-restart during update  
 - Detects and installs the correct latest build  
+- Resolves required managed FFmpeg from selected ErsatzTV release data
+- Upgrades FFmpeg only when required (or when managed binaries are missing/invalid)
 - Automatically restarts and verifies the web interface  
 - Rolls back automatically if an update fails  
 
----
-## 🧨 Automated Uninstalling ErsatzTV
+### Managed FFmpeg compatibility behavior
 
-Run the included updater script anytime:  
-This will remove binaries and service but ask if you want to keep `/home/ersatztv` which has the current settings and database if you want a new install at a later date.
+- FFmpeg compatibility is resolved from `ErsatzTV/legacy` release metadata before live files are changed.
+- Official links to `ErsatzTV/ErsatzTV-ffmpeg/releases/tag/<version>` are treated as highest-confidence requirements.
+- Structured release-note statements like `Bundled FFmpeg was upgraded from 7.1 to 8.1.2` are parsed.
+- If a release has no explicit FFmpeg change, compatibility may be inherited from earlier inspected releases.
+- Built-in fallback mapping includes `v26.7.0 -> 8.1.2`.
+- Unknown/ambiguous compatibility fails safely before service stop or file replacement.
+- The managed FFmpeg bundle is validated using `/opt/ersatztv/ffmpeg*` binaries (`ffmpeg -version`, `ffprobe -version`).
+- System package FFmpeg (for example `/usr/bin/ffmpeg`) is not used as a replacement for the managed bundle.
+
+Check the installed managed versions regardless of archive layout:
+```bash
+FFMPEG_DIR=/opt/ersatztv/ffmpeg
+[[ -x "$FFMPEG_DIR/bin/ffmpeg" ]] && FFMPEG_DIR="$FFMPEG_DIR/bin"
+"$FFMPEG_DIR/ffmpeg" -version
+"$FFMPEG_DIR/ffprobe" -version
+```
+
+Compatibility wrappers are still installed temporarily:
+- `install_linux_ersatztv.sh` → `ersatztv-linux-automation --install`
+- `update_linux_ersatztv.sh` → `ersatztv-linux-automation --upgrade`
+
+Both print a deprecation warning. The repository-level `install_linux_ersatztv.sh` also remains a standalone bootstrapper so previously published one-line install commands continue to work.
+
+### Upgrading from v1.2.x
+
+Use the new canonical script for the first v1.3.0 upgrade:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/Ersatztv-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --upgrade
+```
+
+The upgrade installs the canonical management command at:
+
+```text
+/usr/local/sbin/ersatztv-linux-automation
+```
+
+After that, future upgrades can be run locally with:
+
+```bash
+sudo ersatztv-linux-automation --upgrade
+```
+
+---
+
+## 🩹 Repairing an ErsatzTV Legacy Installation
+
+Use repair when the Legacy installation exists but managed files, permissions, the service definition, lifecycle commands, or the managed FFmpeg bundle need to be restored:
+
+```bash
+sudo ersatztv-linux-automation --repair
+```
+
+The repair workflow recreates or corrects the dedicated system user and required directories, ownership and permissions, the systemd service, managed FFmpeg when missing or invalid, and the installed lifecycle commands and compatibility wrappers. It preserves the ErsatzTV database and configuration under `/home/ersatztv/.local/share/ersatztv`.
+
+The repair action targets ErsatzTV Legacy only and does not migrate or modify ErsatzTV Next installations.
+
+---
+## 🧨 Automated Uninstalling ErsatzTV Legacy
+
+> The uninstall workflow targets the Legacy installation layout created by this project. It does not detect or remove ErsatzTV Next.
+
+Run the canonical lifecycle command to remove ErsatzTV Legacy.
+
+The standard uninstall removes the application and service, then asks whether to preserve `/home/ersatztv`, which contains the current settings and database for a later reinstall.
 
 Partial Uninstall (Save user data/configs)
 ```bash
-  sudo install_linux_ersatztv.sh uninstall
+  sudo ersatztv-linux-automation --uninstall
 ```
 
 Full Uninstall (Nothing Saved)
 
 One-Liner
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --uninstall --purge
 ```
 
 Local
 ```bash
-  sudo install_linux_ersatztv.sh uninstall --purge
+  sudo ersatztv-linux-automation --uninstall --purge
 ```
 
 Optional (remove RetroIPTVGuide):
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/install_linux_ersatztv.sh | sudo bash -s uninstall --purge --retroiptvguide
+curl -sSL https://raw.githubusercontent.com/thehack904/ErsatzTV-Linux-Automation/main/ersatztv-linux-automation.sh | sudo bash -s -- --uninstall --purge --retroiptvguide
 ```
 
 During uninstall, the script will also remove the open firewall rule (port `8409/tcp`) if present.
@@ -229,7 +306,7 @@ This project is licensed under the **zLib License**, allowing free use, modifica
 ## 💬 Credits
 
 - **ErsatzTV-Linux-Automation** maintained by *thehack904*  
-- **ErsatzTV** developed by [Jason G. Dove](https://github.com/ErsatzTV/ErsatzTV)
+- **ErsatzTV Legacy** developed by [Jason G. Dove and contributors](https://github.com/ErsatzTV/legacy)
 - **RetroIPTVGuide** developed by [thehack904](https://github.com/thehack904/RetroIPTVGuide)
 
 ---

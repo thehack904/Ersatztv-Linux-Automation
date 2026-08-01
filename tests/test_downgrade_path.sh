@@ -171,7 +171,7 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════════
 # Stage 2 — Run the downgrade logic
 #
-# Mirrors what install_linux_ersatztv.sh does when the user selects a tag
+# Mirrors what ersatztv-linux-automation.sh does when the user selects a tag
 # older than the currently installed one (e.g. v26.4 → v26.3).
 # ══════════════════════════════════════════════════════════════════════════
 echo "────────────────────────────────────────────────────────────"

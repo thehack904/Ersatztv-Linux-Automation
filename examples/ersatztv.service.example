@@ -1,3 +1,4 @@
+# Example systemd unit for ErsatzTV Legacy only. ErsatzTV Next is not supported by this automation.
 [Unit]
 Description=ErsatzTV Service
 After=network.target

@@ -40,7 +40,7 @@ echo
 # ---------------------------------------------------------
 # 2. Ensure main installer script exists
 # ---------------------------------------------------------
-INSTALLER="./install_linux_ersatztv.sh"
+INSTALLER="./ersatztv-linux-automation.sh"
 
 if [[ ! -x "$INSTALLER" ]]; then
   echo "❌ ERROR: $INSTALLER not found or not executable."
@@ -53,7 +53,7 @@ fi
 echo "🚀 Running ErsatzTV Linux Automation installer..."
 "$INSTALLER" "$@"
 echo
-echo "✅ install_linux_ersatztv.sh completed successfully."
+echo "✅ ersatztv-linux-automation.sh completed successfully."
 echo
 
 # ---------------------------------------------------------
@@ -67,4 +67,3 @@ echo "✅ All tasks completed.  Exiting normally."
 echo "Finished: $(date)"
 echo
 exit 0
-

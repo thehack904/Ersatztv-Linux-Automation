@@ -111,7 +111,7 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════════
 # Stage 2 — Run the v1.2.0 update logic
 #
-# This mirrors the steps performed by install_linux_ersatztv.sh when run
+# This mirrors the steps performed by ersatztv-linux-automation.sh when run
 # with the 'update' action, adapted to operate in the temp workspace.
 # ══════════════════════════════════════════════════════════════════════════
 echo "🔄 Stage 2: Running v1.2.0 update logic..."

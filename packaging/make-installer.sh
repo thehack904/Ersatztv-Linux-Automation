@@ -9,8 +9,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PAYLOAD_DIR="$SCRIPT_DIR/payload"
-OUT_FILE="$SCRIPT_DIR/ersatztv-installer.run"
+OUT_FILE="$REPO_ROOT/ersatztv-installer.run"
+CHECKSUM_FILE="$REPO_ROOT/checksums.txt"
 
 echo "🧩 Building ErsatzTV Linux Automation installer..."
 
@@ -62,9 +64,9 @@ makeself "$PAYLOAD_DIR" \
 # -----------------------------------------------------------
 echo "🔒 Generating top-level checksums..."
 if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "$OUT_FILE" > "$SCRIPT_DIR/checksums.txt"
+  (cd "$REPO_ROOT" && sha256sum "$(basename "$OUT_FILE")" > "$(basename "$CHECKSUM_FILE")")
 else
-  shasum -a 256 "$OUT_FILE" > "$SCRIPT_DIR/checksums.txt"
+  (cd "$REPO_ROOT" && shasum -a 256 "$(basename "$OUT_FILE")" > "$(basename "$CHECKSUM_FILE")")
 fi
 
 # -----------------------------------------------------------
@@ -74,7 +76,7 @@ echo ""
 echo "✅ Build complete!"
 echo "Output files:"
 echo "  • $OUT_FILE"
-echo "  • $SCRIPT_DIR/checksums.txt"
+echo "  • $CHECKSUM_FILE"
 echo ""
 echo "To verify:"
 echo "  sha256sum -c checksums.txt"

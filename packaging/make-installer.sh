@@ -29,9 +29,13 @@ echo "🔍 Generating manifest..."
 (
   cd "$PAYLOAD_DIR"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum $(find . -type f -print | sed 's|^\./||') > manifest.sha256
+    find . -type f ! -name manifest.sha256 -print0 \
+      | sort -z \
+      | xargs -0 sha256sum > manifest.sha256
   else
-    shasum -a 256 $(find . -type f -print | sed 's|^\./||') > manifest.sha256
+    find . -type f ! -name manifest.sha256 -print0 \
+      | sort -z \
+      | xargs -0 shasum -a 256 > manifest.sha256
   fi
 )
 echo "✅ Manifest created."

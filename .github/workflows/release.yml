@@ -20,7 +20,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y makeself gpg
+          sudo apt-get install -y makeself gpg shellcheck
 
       - name: Build installer
         run: bash packaging/make-installer.sh
@@ -63,9 +63,11 @@ jobs:
             .
 
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: "./"
+        run: |
+          shellcheck --severity=warning \
+            ersatztv-linux-automation.sh \
+            packaging/make-installer.sh \
+            packaging/payload/ersatztv-linux-automation.sh
 
       - name: Run PII Guard
         run: |

@@ -15,10 +15,6 @@ DATA_FOLDER="/home/ersatztv/.local/share/ersatztv"
 GITHUB_REPO="ErsatzTV/legacy"
 FFMPEG_REPO="ErsatzTV/ErsatzTV-ffmpeg"
 FFMPEG_TAG_FILE="$INSTALL_DIR/.installed_ffmpeg_version"
-KNOWN_FFMPEG_COMPATIBILITY=(
-    "v26.7.0:8.1.2"
-    "v25.2.0:7.1.1"
-)
 AUTOMATION_STATE_DIR="/var/lib/ersatztv-linux-automation"
 COMPATIBILITY_CACHE_DIR="$AUTOMATION_STATE_DIR/compatibility"
 AUTOMATION_CMD_PATH="/usr/local/sbin/ersatztv-linux-automation"
@@ -829,7 +825,8 @@ _fetch_previous_github_tag() {
 # Creates a timestamped backup of the ErsatzTV data folder under /opt/.
 # Called automatically before a downgrade to protect the user's database.
 backup_data_folder() {
-    local backup_dir="/opt/ersatztv_data_backup_$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="/opt/ersatztv_data_backup_$(date +%Y%m%d_%H%M%S)"
     echo "📦 Backing up ErsatzTV data to $backup_dir ..."
     cp -a "$DATA_FOLDER" "$backup_dir" 2>/dev/null || true
     if [[ -d "$backup_dir" ]]; then
@@ -1691,7 +1688,7 @@ verify_ersatztv_ffmpeg_health() {
 perform_install_or_upgrade() {
     local ersatztv_tag="${SELECTED_TAG:-$DEFAULT_ERSATZTV_TAG}"
     local required_ffmpeg_tag ersatztv_asset_url ffmpeg_asset_url
-    local staged_binary staged_ffmpeg_binary
+    local staged_binary
     local replace_ffmpeg=true installed_ffmpeg_version version_cmp
 
     # Discovery
@@ -1752,7 +1749,7 @@ perform_install_or_upgrade() {
         echo "➡️  Fetching staged FFmpeg asset: $ffmpeg_asset_url"
         download_file "$ffmpeg_asset_url" "$STAGING_DIR/ffmpeg.tar.xz" 10240
         extract_archive "$STAGING_DIR/ffmpeg.tar.xz" "$STAGING_DIR/ffmpeg" 1
-        staged_ffmpeg_binary=$(validate_staged_ffmpeg "$required_ffmpeg_tag")
+        validate_staged_ffmpeg "$required_ffmpeg_tag" >/dev/null
     fi
 
     # Backup + service state
@@ -1847,7 +1844,7 @@ perform_repair() {
         fi
         install_ffmpeg_files
         echo "$required_ffmpeg_tag" > "$FFMPEG_TAG_FILE"
-        echo "$(detect_ffmpeg_path)" > /tmp/ffmpeg_path_detected
+        detect_ffmpeg_path > /tmp/ffmpeg_path_detected
         cleanup_transaction
     fi
 

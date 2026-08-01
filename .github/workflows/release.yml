@@ -4,80 +4,144 @@ on:
   push:
     tags:
       - "v*.*.*"
-      - "v*.*.*-rc*"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
+      actions: read
       contents: write
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      - name: Install deps
-        run: sudo apt-get update -y && sudo apt-get install -y makeself gpg
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y makeself gpg
 
-      - name: Build .run
+      - name: Build installer
         run: bash packaging/make-installer.sh
+
+      # ======================================
+      # Phase 6 - Security and validation
+      # ======================================
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --no-banner --redact
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          ignore-unfixed: "true"
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: "."
+          format: "spdx-json"
+          output-file: "sbom.spdx.json"
+          artifact-name: "ersatztv-linux-automation-sbom.spdx.json"
+          upload-artifact: "true"
+          upload-release-assets: "false"
+
+      - name: Run OSV Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            --include-git-root
+            .
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./"
+
+      - name: Run PII Guard
+        run: |
+          chmod +x scripts/pii_guard.sh
+          ./scripts/pii_guard.sh
+
+      # ======================================
+      # Sign and publish release
+      # ======================================
 
       - name: Import GPG key
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        run: |
+          test -n "$GPG_PRIVATE_KEY" || {
+            echo "::error::GPG_PRIVATE_KEY secret is not configured."
+            exit 1
+          }
+
+          printf '%s' "$GPG_PRIVATE_KEY" |
+            gpg --batch --import
 
       - name: Sign checksums
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          KEYID=$(gpg --list-secret-keys --keyid-format=long | awk '/sec/{print $2}' | sed 's|.*/||' | head -n1)
-          gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
-              --local-user "$KEYID" --armor --detach-sign -o checksums.txt.asc checksums.txt
+          test -f checksums.txt || {
+            echo "::error::checksums.txt was not generated."
+            exit 1
+          }
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
+          KEYID="$(
+            gpg --batch --list-secret-keys --keyid-format=long |
+              awk '/^sec/{print $2}' |
+              sed 's|.*/||' |
+              head -n1
+          )"
+
+          test -n "$KEYID" || {
+            echo "::error::No imported GPG secret key was found."
+            exit 1
+          }
+
+          gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
+            --local-user "$KEYID" \
+            --armor \
+            --detach-sign \
+            --output checksums.txt.asc \
+            checksums.txt
+
+      - name: Verify release files
+        run: |
+          for file in \
+            ersatztv-installer.run \
+            checksums.txt \
+            checksums.txt.asc \
+            sbom.spdx.json
+          do
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Required release file is missing or empty: $file"
+              exit 1
+            fi
+          done
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-rc') }}
+          fail_on_unmatched_files: "true"
           files: |
             ersatztv-installer.run
             checksums.txt
             checksums.txt.asc
-
-      # ======================================
-      # 🧱 Phase 6 - Security Layers
-      # ======================================
-      - name: 🕵️ Run Gitleaks (Secret Scanner)
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: detect --source . --no-banner --redact
-
-      - name: 🔍 Run Trivy (Vulnerability Scanner)
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          scan-type: 'fs'
-          ignore-unfixed: true
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-
-      - name: 🧾 Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: "."
-          output: "sbom.json"
-
-      - name: 🛡️ Run OSV Scanner
-        uses: google/osv-scanner-action@v2.3.8
-        with:
-          scan-args: "."
-          fail-on: "vulnerabilities"
-
-      - name: 🧠 ShellCheck (Lint Bash scripts)
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: "./"
-
-      - name: 🔒 PII Guard
-        run: |
-          chmod +x scripts/pii_guard.sh
-          ./scripts/pii_guard.sh
-
+            sbom.spdx.json
